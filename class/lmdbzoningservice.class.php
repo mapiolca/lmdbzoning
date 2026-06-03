@@ -46,7 +46,7 @@ class LmdbZoningService
 	public static function getZonableObjectDefinitions($onlyAvailable = 0)
 	{
 		$definitions = array(
-			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_link_type' => 'soc', 'category_link_table' => 'categorie_societe', 'category_field' => 'fk_categorie_societe', 'address_strategy' => 'self', 'category_priority' => 10),
+			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_link_type' => 'soc', 'category_link_table' => 'categorie_societe', 'category_link_object_field' => 'fk_soc', 'category_link_category_field' => 'fk_categorie', 'category_field' => 'fk_categorie_societe', 'address_strategy' => 'self', 'category_priority' => 10),
 			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_id' => 4, 'category_link_type' => 'contact', 'category_field' => 'fk_categorie_contact', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30),
 			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal', 'module' => 'propal', 'table_element' => 'propal', 'category_type_id' => 23, 'category_link_type' => 'propal', 'category_field' => 'fk_categorie_propal', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
 			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande', 'module' => 'commande', 'table_element' => 'commande', 'category_type_id' => 16, 'category_link_type' => 'commande', 'category_field' => 'fk_categorie_commande', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
@@ -418,12 +418,8 @@ class LmdbZoningService
 			$this->error = 'CategoryEntityMismatch';
 			return -1;
 		}
-		if (!method_exists($category, 'add_type')) {
-			return 0;
-		}
-
-		$this->removeKnownZoneCategories($object, $elementType, $linkType, $zoneResult);
-		$result = $category->add_type($object, $linkType);
+		$this->removeKnownZoneCategories($object, $elementType, $linkType, (int) $fkElement, $zoneResult);
+		$result = $this->addCategoryLinkToObject($object, $elementType, $linkType, (int) $fkElement, (int) $zoneResult['fk_categorie']);
 		$this->logEvent('LMDBZONING_CATEGORY_APPLY', $elementType, (int) $fkElement, '', $zoneResult);
 
 		return $result < 0 ? -1 : 1;
@@ -1676,6 +1672,30 @@ class LmdbZoningService
 	}
 
 	/**
+	 * Return Dolibarr category link definition.
+	 *
+	 * @param string $elementType Element type
+	 * @return array<string,string>
+	 */
+	private function getCategoryLinkDefinitionForElement($elementType)
+	{
+		$definition = self::getZonableObjectDefinition($elementType);
+		$linkType = !empty($definition['category_link_type']) ? (string) $definition['category_link_type'] : '';
+		$linkType = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $linkType);
+		$tableName = !empty($definition['category_link_table']) ? (string) $definition['category_link_table'] : ($linkType !== '' ? 'categorie_'.$linkType : '');
+		$tableName = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $tableName);
+		$objectField = !empty($definition['category_link_object_field']) ? preg_replace('/[^a-zA-Z0-9_]/', '', (string) $definition['category_link_object_field']) : '';
+		$categoryField = !empty($definition['category_link_category_field']) ? preg_replace('/[^a-zA-Z0-9_]/', '', (string) $definition['category_link_category_field']) : '';
+
+		return array(
+			'link_type' => $linkType,
+			'table' => $tableName,
+			'object_field' => $objectField,
+			'category_field' => $categoryField,
+		);
+	}
+
+	/**
 	 * Check if a Dolibarr category link table exists.
 	 *
 	 * @param string $linkType Category link type
@@ -1683,13 +1703,8 @@ class LmdbZoningService
 	 */
 	private function categoryLinkTableExists($elementType, $linkType)
 	{
-		$linkType = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $linkType);
-		if ($linkType === '') {
-			return false;
-		}
-		$definition = self::getZonableObjectDefinition($elementType);
-		$tableName = !empty($definition['category_link_table']) ? (string) $definition['category_link_table'] : 'categorie_'.$linkType;
-		$tableName = preg_replace('/[^a-zA-Z0-9_]/', '', $tableName);
+		$linkDefinition = $this->getCategoryLinkDefinitionForElement($elementType);
+		$tableName = $linkDefinition['table'];
 		if ($tableName === '') {
 			return false;
 		}
@@ -1700,6 +1715,133 @@ class LmdbZoningService
 		}
 
 		return (bool) $this->db->num_rows($resql);
+	}
+
+	/**
+	 * Add a category link to an object.
+	 *
+	 * @param object $object      Target object
+	 * @param string $elementType Element type
+	 * @param string $linkType    Category link type
+	 * @param int    $fkElement   Element id
+	 * @param int    $fkCategory  Category id
+	 * @return int
+	 */
+	private function addCategoryLinkToObject($object, $elementType, $linkType, $fkElement, $fkCategory)
+	{
+		$linkDefinition = $this->getCategoryLinkDefinitionForElement($elementType);
+		if ($linkDefinition['table'] !== '' && $linkDefinition['object_field'] !== '' && $linkDefinition['category_field'] !== '') {
+			return $this->insertCategoryLink($elementType, (int) $fkElement, (int) $fkCategory);
+		}
+
+		if (!class_exists('Categorie') || !method_exists('Categorie', 'add_type')) {
+			return 0;
+		}
+		$category = new Categorie($this->db);
+		if ($category->fetch((int) $fkCategory) <= 0) {
+			return -1;
+		}
+		$result = $category->add_type($object, $linkType);
+
+		return $result < 0 ? -1 : 1;
+	}
+
+	/**
+	 * Delete a category link from an object.
+	 *
+	 * @param object $object      Target object
+	 * @param string $elementType Element type
+	 * @param string $linkType    Category link type
+	 * @param int    $fkElement   Element id
+	 * @param int    $fkCategory  Category id
+	 * @return int
+	 */
+	private function deleteCategoryLinkFromObject($object, $elementType, $linkType, $fkElement, $fkCategory)
+	{
+		$linkDefinition = $this->getCategoryLinkDefinitionForElement($elementType);
+		if ($linkDefinition['table'] !== '' && $linkDefinition['object_field'] !== '' && $linkDefinition['category_field'] !== '') {
+			return $this->deleteCategoryLink($elementType, (int) $fkElement, (int) $fkCategory);
+		}
+
+		if (!class_exists('Categorie') || !method_exists('Categorie', 'del_type')) {
+			return 0;
+		}
+		$category = new Categorie($this->db);
+		if ($category->fetch((int) $fkCategory) <= 0) {
+			return -1;
+		}
+		$result = $category->del_type($object, $linkType);
+
+		return $result < 0 ? -1 : 1;
+	}
+
+	/**
+	 * Insert an explicit category link.
+	 *
+	 * @param string $elementType Element type
+	 * @param int    $fkElement   Element id
+	 * @param int    $fkCategory  Category id
+	 * @return int
+	 */
+	private function insertCategoryLink($elementType, $fkElement, $fkCategory)
+	{
+		$linkDefinition = $this->getCategoryLinkDefinitionForElement($elementType);
+		if (!$this->categoryLinkTableExists($elementType, $linkDefinition['link_type'])) {
+			dol_syslog(__METHOD__.' category link table missing elementType='.$elementType.' table='.$linkDefinition['table'], LOG_WARNING);
+			return 0;
+		}
+		$table = MAIN_DB_PREFIX.$linkDefinition['table'];
+		$categoryField = $linkDefinition['category_field'];
+		$objectField = $linkDefinition['object_field'];
+		$sql = 'SELECT '.$categoryField.' FROM '.$table;
+		$sql .= ' WHERE '.$categoryField.' = '.((int) $fkCategory);
+		$sql .= ' AND '.$objectField.' = '.((int) $fkElement);
+		$sql .= ' LIMIT 1';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			dol_syslog(__METHOD__.' category link select failed: '.$this->db->lasterror(), LOG_WARNING);
+			return -1;
+		}
+		if ($this->db->num_rows($resql) > 0) {
+			return 1;
+		}
+
+		$sql = 'INSERT INTO '.$table.' ('.$categoryField.', '.$objectField.') VALUES ('.((int) $fkCategory).', '.((int) $fkElement).')';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			dol_syslog(__METHOD__.' category link insert failed: '.$this->db->lasterror(), LOG_WARNING);
+			return -1;
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Delete an explicit category link.
+	 *
+	 * @param string $elementType Element type
+	 * @param int    $fkElement   Element id
+	 * @param int    $fkCategory  Category id
+	 * @return int
+	 */
+	private function deleteCategoryLink($elementType, $fkElement, $fkCategory)
+	{
+		$linkDefinition = $this->getCategoryLinkDefinitionForElement($elementType);
+		if (!$this->categoryLinkTableExists($elementType, $linkDefinition['link_type'])) {
+			dol_syslog(__METHOD__.' category link table missing elementType='.$elementType.' table='.$linkDefinition['table'], LOG_WARNING);
+			return 0;
+		}
+		$table = MAIN_DB_PREFIX.$linkDefinition['table'];
+		$sql = 'DELETE FROM '.$table;
+		$sql .= ' WHERE '.$linkDefinition['category_field'].' = '.((int) $fkCategory);
+		$sql .= ' AND '.$linkDefinition['object_field'].' = '.((int) $fkElement);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			dol_syslog(__METHOD__.' category link delete failed: '.$this->db->lasterror(), LOG_WARNING);
+			return -1;
+		}
+
+		return 1;
 	}
 
 	/**
@@ -1727,7 +1869,7 @@ class LmdbZoningService
 	 * @param array<string,mixed> $zoneResult Zone result
 	 * @return void
 	 */
-	private function removeKnownZoneCategories($object, $elementType, $linkType, array $zoneResult)
+	private function removeKnownZoneCategories($object, $elementType, $linkType, $fkElement, array $zoneResult)
 	{
 		if (empty($zoneResult['fk_profile']) || !class_exists('Categorie')) {
 			return;
@@ -1747,10 +1889,7 @@ class LmdbZoningService
 				if (empty($fkcat) || (int) $fkcat === (int) $zoneResult['fk_categorie']) {
 					continue;
 				}
-				$category = new Categorie($this->db);
-				if ($category->fetch((int) $fkcat) > 0 && method_exists($category, 'del_type')) {
-					$category->del_type($object, $linkType);
-				}
+				$this->deleteCategoryLinkFromObject($object, $elementType, $linkType, (int) $fkElement, (int) $fkcat);
 			}
 		}
 	}
