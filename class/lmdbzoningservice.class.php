@@ -525,11 +525,48 @@ class LmdbZoningService
 	 */
 	public function forceRecalculateProfileObjects($profile, $maxItems = 50, $entity = 0)
 	{
+		$stats = $this->queueProfileObjectsForRecalculation($profile, $maxItems, $entity);
+		if (!empty($stats['failed'])) {
+			return $stats;
+		}
+
+		$maxItems = max(1, (int) $maxItems);
+		$todo = $this->fetchPendingProfileRows((int) $profile->id, $maxItems, $stats['entity']);
+		if (!is_array($todo)) {
+			$stats['failed']++;
+			dol_syslog(__METHOD__.' fetch pending failed profile='.(int) $profile->id.' error='.$this->error, LOG_WARNING);
+			return $stats;
+		}
+		foreach ($todo as $row) {
+			$stats['processed']++;
+			$result = $this->calculateZoneForObject($row->element_type, (int) $row->fk_element, $profile->ref, $stats['entity']);
+			if (!empty($result['status']) && $result['status'] === 'ok') {
+				$stats['ok']++;
+			} else {
+				$stats['failed']++;
+			}
+		}
+		$stats['remaining'] = $this->countPendingProfileRows((int) $profile->id, $stats['entity']);
+		dol_syslog(__METHOD__.' done profile='.(int) $profile->id.' queued='.$stats['queued'].' processed='.$stats['processed'].' ok='.$stats['ok'].' failed='.$stats['failed'].' remaining='.$stats['remaining'].' skipped_due_to_limit='.$stats['skipped_due_to_limit'], $stats['failed'] > 0 ? LOG_WARNING : LOG_INFO);
+
+		return $stats;
+	}
+
+	/**
+	 * Queue eligible objects for profile recalculation without calculating them.
+	 *
+	 * @param LmdbZoningProfile $profile  Profile
+	 * @param int               $maxItems Max rows to queue
+	 * @param int               $entity   Entity id
+	 * @return array<string,int>
+	 */
+	public function queueProfileObjectsForRecalculation($profile, $maxItems = 50, $entity = 0)
+	{
 		global $conf;
 
 		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
 		$maxItems = max(1, (int) $maxItems);
-		$stats = array('queued' => 0, 'processed' => 0, 'ok' => 0, 'failed' => 0, 'remaining' => 0, 'skipped' => 0, 'skipped_due_to_limit' => 0);
+		$stats = array('entity' => $entity, 'queued' => 0, 'processed' => 0, 'ok' => 0, 'failed' => 0, 'remaining' => 0, 'already_pending' => 0, 'skipped' => 0, 'skipped_due_to_limit' => 0);
 		if (empty($profile->id) || empty($profile->ref)) {
 			$this->error = 'ProfileNotFound';
 			$stats['failed']++;
@@ -537,6 +574,7 @@ class LmdbZoningService
 		}
 
 		dol_syslog(__METHOD__.' start profile='.(int) $profile->id.' maxItems='.$maxItems.' entity='.$entity, LOG_INFO);
+		$initialPending = $this->countPendingProfileRows((int) $profile->id, $entity);
 		foreach (self::getZonableObjectDefinitions(1) as $elementType => $definition) {
 			if ($this->isAliasElementType($elementType)) {
 				continue;
@@ -573,24 +611,9 @@ class LmdbZoningService
 				}
 			}
 		}
-
-		$todo = $this->fetchPendingProfileRows((int) $profile->id, $maxItems, $entity);
-		if (!is_array($todo)) {
-			$stats['failed']++;
-			dol_syslog(__METHOD__.' fetch pending failed profile='.(int) $profile->id.' error='.$this->error, LOG_WARNING);
-			return $stats;
-		}
-		foreach ($todo as $row) {
-			$stats['processed']++;
-			$result = $this->calculateZoneForObject($row->element_type, (int) $row->fk_element, $profile->ref, $entity);
-			if (!empty($result['status']) && $result['status'] === 'ok') {
-				$stats['ok']++;
-			} else {
-				$stats['failed']++;
-			}
-		}
 		$stats['remaining'] = $this->countPendingProfileRows((int) $profile->id, $entity);
-		dol_syslog(__METHOD__.' done profile='.(int) $profile->id.' queued='.$stats['queued'].' processed='.$stats['processed'].' ok='.$stats['ok'].' failed='.$stats['failed'].' remaining='.$stats['remaining'].' skipped_due_to_limit='.$stats['skipped_due_to_limit'], $stats['failed'] > 0 ? LOG_WARNING : LOG_INFO);
+		$stats['already_pending'] = max(0, $initialPending);
+		dol_syslog(__METHOD__.' done profile='.(int) $profile->id.' queued='.$stats['queued'].' already_pending='.$stats['already_pending'].' remaining='.$stats['remaining'].' failed='.$stats['failed'].' skipped_due_to_limit='.$stats['skipped_due_to_limit'], $stats['failed'] > 0 ? LOG_WARNING : LOG_INFO);
 
 		return $stats;
 	}

@@ -30,11 +30,18 @@ if ($action === 'force_recalculate' && $fk_profile > 0) {
 	}
 	$maxItems = max(1, empty($conf->global->LMDBZONING_CRON_MAX_ITEMS) ? 50 : (int) $conf->global->LMDBZONING_CRON_MAX_ITEMS);
 	$service = new LmdbZoningService($db);
-	$stats = $service->forceRecalculateProfileObjects($profile, $maxItems, (int) $conf->entity);
+	$stats = $service->queueProfileObjectsForRecalculation($profile, $maxItems, (int) $conf->entity);
 	if (!empty($service->error)) {
 		setEventMessages($service->error, $service->errors, 'errors');
 	}
-	setEventMessages($langs->trans('LmdbZoningForcedRecalculationDone', $stats['queued'], $stats['processed'], $stats['ok'], $stats['failed'], $stats['remaining'], $stats['skipped_due_to_limit']), null, $stats['failed'] > 0 ? 'warnings' : 'mesgs');
+	setEventMessages($langs->trans(
+		'LmdbZoningForcedRecalculationQueued',
+		$stats['queued'],
+		$stats['already_pending'],
+		$stats['remaining'],
+		$stats['skipped_due_to_limit'],
+		$stats['failed']
+	), null, $stats['failed'] > 0 ? 'warnings' : 'mesgs');
 	header('Location: '.$_SERVER['PHP_SELF'].'?fk_profile='.(int) $fk_profile);
 	exit;
 }
