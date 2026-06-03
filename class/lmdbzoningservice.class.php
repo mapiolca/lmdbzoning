@@ -296,9 +296,10 @@ class LmdbZoningService
 	 * @param string $profileRef  Profile ref
 	 * @param int    $entity      Entity id
 	 * @param int    $forceApplyCategory Force category application
+	 * @param int    $skipApplyCategory  1=do not apply category in this call
 	 * @return array<string,mixed>
 	 */
-	public function calculateZoneForObject($elementType, $fkElement, $profileRef, $entity = 0, $forceApplyCategory = 0)
+	public function calculateZoneForObject($elementType, $fkElement, $profileRef, $entity = 0, $forceApplyCategory = 0, $skipApplyCategory = 0)
 	{
 		global $conf, $user;
 
@@ -329,7 +330,7 @@ class LmdbZoningService
 		$result = $this->calculateZoneForAddress($address, $profileRef, $entity);
 		$result['entity'] = $entity;
 		$this->storeObjectZoneResult($elementType, (int) $fkElement, $result, $entity);
-		if ($result['status'] === 'ok' && (!empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY) || !empty($forceApplyCategory))) {
+		if (empty($skipApplyCategory) && $result['status'] === 'ok' && (!empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY) || !empty($forceApplyCategory))) {
 			$this->applyZoneCategoryToObject($elementType, (int) $fkElement, $result);
 		}
 		$this->logEvent('LMDBZONING_OBJECT_CALCULATE', $elementType, (int) $fkElement, isset($result['message']) ? $result['message'] : '', $result);
@@ -423,6 +424,38 @@ class LmdbZoningService
 		$this->logEvent('LMDBZONING_CATEGORY_APPLY', $elementType, (int) $fkElement, '', $zoneResult);
 
 		return $result < 0 ? -1 : 1;
+	}
+
+	/**
+	 * Apply the last stored zone category to an object.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $fkElement   Object id
+	 * @param string $profileRef  Profile ref
+	 * @param int    $entity      Entity id
+	 * @return int
+	 */
+	public function applyStoredZoneCategoryToObject($elementType, $fkElement, $profileRef, $entity = 0)
+	{
+		global $conf;
+
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+		$storedZone = $this->getObjectZone($elementType, (int) $fkElement, $profileRef, $entity);
+		if (empty($storedZone)) {
+			$this->error = 'ObjectZoneNotFound';
+			return -1;
+		}
+		if (empty($storedZone['calculation_status']) || $storedZone['calculation_status'] !== 'ok' || empty($storedZone['fk_categorie'])) {
+			return 0;
+		}
+
+		$zoneResult = $storedZone;
+		$zoneResult['status'] = $storedZone['calculation_status'];
+		$zoneResult['message'] = isset($storedZone['calculation_message']) ? $storedZone['calculation_message'] : '';
+		$zoneResult['entity'] = $entity;
+		$zoneResult['profile_ref'] = $profileRef;
+
+		return $this->applyZoneCategoryToObject($elementType, (int) $fkElement, $zoneResult);
 	}
 
 	/**
@@ -1865,7 +1898,9 @@ class LmdbZoningService
 	 * Remove known zone categories for this profile from target before adding new one.
 	 *
 	 * @param object              $object     Target object
-	 * @param string              $type       Category type
+	 * @param string              $elementType Element type
+	 * @param string              $linkType   Category link type
+	 * @param int                 $fkElement  Element id
 	 * @param array<string,mixed> $zoneResult Zone result
 	 * @return void
 	 */
@@ -1877,7 +1912,11 @@ class LmdbZoningService
 		if (!$this->categoryLinkTableExists($elementType, $linkType)) {
 			return;
 		}
-		$sql = 'SELECT fk_categorie_default, fk_categorie_societe, fk_categorie_contact, fk_categorie_powerplantpv, fk_categorie_propal, fk_categorie_commande, fk_categorie_facture, fk_categorie_contract, fk_categorie_project, fk_categorie_fichinter, fk_categorie_timesheetweek';
+		$categoryFields = $this->getZoneCategoryFieldsForElement($elementType);
+		if (empty($categoryFields)) {
+			return;
+		}
+		$sql = 'SELECT '.implode(', ', $categoryFields);
 		$sql .= ' FROM '.MAIN_DB_PREFIX.'lmdbzoning_profile_zone';
 		$sql .= ' WHERE fk_profile = '.((int) $zoneResult['fk_profile']);
 		$resql = $this->db->query($sql);
@@ -1892,6 +1931,31 @@ class LmdbZoningService
 				$this->deleteCategoryLinkFromObject($object, $elementType, $linkType, (int) $fkElement, (int) $fkcat);
 			}
 		}
+	}
+
+	/**
+	 * Return profile zone category fields relevant for an element type.
+	 *
+	 * @param string $elementType Element type
+	 * @return array<int,string>
+	 */
+	private function getZoneCategoryFieldsForElement($elementType)
+	{
+		$fields = array('fk_categorie_default');
+		$definition = self::getZonableObjectDefinition($elementType);
+		if (!empty($definition['category_field'])) {
+			$fields[] = (string) $definition['category_field'];
+		}
+
+		$validFields = array();
+		foreach (array_unique($fields) as $field) {
+			$field = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $field);
+			if ($field !== '') {
+				$validFields[] = $field;
+			}
+		}
+
+		return $validFields;
 	}
 
 	/**

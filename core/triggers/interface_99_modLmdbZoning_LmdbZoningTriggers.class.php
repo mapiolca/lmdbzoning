@@ -69,7 +69,7 @@ class InterfaceLmdbZoningTriggers
 
 		$entity = $this->getObjectEntity($object, (int) $conf->entity);
 		$service = new LmdbZoningService($this->db);
-		$result = $service->calculateZoneForObject($elementType, $fkElement, $profileRef, $entity);
+		$result = $service->calculateZoneForObject($elementType, $fkElement, $profileRef, $entity, 0, 1);
 		if (empty($result['status']) || $result['status'] !== 'ok') {
 			$error = !empty($result['message']) ? $result['message'] : (!empty($service->error) ? $service->error : 'UnknownError');
 			dol_syslog(__METHOD__.' '.$action.' failed to calculate elementType='.$elementType.' fkElement='.$fkElement.' error='.$error, LOG_WARNING);
@@ -77,6 +77,19 @@ class InterfaceLmdbZoningTriggers
 				setEventMessages($langs->trans('LmdbZoningTriggerCalculationFailed', $elementType, $fkElement, $error), null, 'warnings');
 			}
 			return 0;
+		}
+		if (!empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY) && function_exists('register_shutdown_function')) {
+			$db = $this->db;
+			register_shutdown_function(function () use ($db, $elementType, $fkElement, $profileRef, $entity) {
+				$service = new LmdbZoningService($db);
+				$result = $service->applyStoredZoneCategoryToObject($elementType, (int) $fkElement, $profileRef, (int) $entity);
+				if ($result < 0) {
+					$error = !empty($service->error) ? $service->error : 'UnknownError';
+					dol_syslog('InterfaceLmdbZoningTriggers::shutdown failed to apply category elementType='.$elementType.' fkElement='.(int) $fkElement.' profile='.$profileRef.' entity='.(int) $entity.' error='.$error, LOG_WARNING);
+				} else {
+					dol_syslog('InterfaceLmdbZoningTriggers::shutdown applied category elementType='.$elementType.' fkElement='.(int) $fkElement.' profile='.$profileRef.' entity='.(int) $entity.' result='.$result, LOG_INFO);
+				}
+			});
 		}
 		dol_syslog(__METHOD__.' '.$action.' calculated elementType='.$elementType.' fkElement='.$fkElement.' profile='.$profileRef.' entity='.$entity.' status='.$result['status'], LOG_INFO);
 
