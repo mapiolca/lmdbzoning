@@ -149,6 +149,41 @@ class LmdbZoningService
 	}
 
 	/**
+	 * Return category fields that can be refreshed from setup.
+	 *
+	 * @return array<string,array<string,mixed>>
+	 */
+	public static function getRefreshableCategoryFields()
+	{
+		$fields = array(
+			'fk_categorie_societe' => array('label' => 'ThirdpartyCategory', 'element_types' => array(), 'supported' => 0),
+			'fk_categorie_contact' => array('label' => 'ContactCategory', 'element_types' => array(), 'supported' => 0),
+			'fk_categorie_powerplantpv' => array('label' => 'PowerplantPVCategory', 'element_types' => array(), 'supported' => 0),
+			'fk_categorie_propal' => array('label' => 'PropalCategory', 'element_types' => array(), 'supported' => 0),
+			'fk_categorie_commande' => array('label' => 'OrderCategory', 'element_types' => array(), 'supported' => 0),
+			'fk_categorie_facture' => array('label' => 'InvoiceCategory', 'element_types' => array(), 'supported' => 0),
+			'fk_categorie_contract' => array('label' => 'ContractCategory', 'element_types' => array(), 'supported' => 0),
+			'fk_categorie_project' => array('label' => 'ProjectCategory', 'element_types' => array(), 'supported' => 0),
+			'fk_categorie_fichinter' => array('label' => 'InterventionCategory', 'element_types' => array(), 'supported' => 0),
+			'fk_categorie_timesheetweek' => array('label' => 'TimesheetWeekCategory', 'element_types' => array(), 'supported' => 0),
+		);
+		foreach (self::getZonableObjectDefinitions(0) as $elementType => $definition) {
+			if (empty($definition['category_field']) || !isset($fields[$definition['category_field']])) {
+				continue;
+			}
+			$field = $definition['category_field'];
+			if (!in_array($elementType, $fields[$field]['element_types'], true)) {
+				$fields[$field]['element_types'][] = $elementType;
+			}
+			if (!empty($definition['available']) && isset($definition['category_type_id']) && $definition['category_type_id'] !== null) {
+				$fields[$field]['supported'] = 1;
+			}
+		}
+
+		return $fields;
+	}
+
+	/**
 	 * Render the linked object name/reference.
 	 *
 	 * @param string $elementType Object element type
@@ -553,18 +588,32 @@ class LmdbZoningService
 	/**
 	 * Refresh categories on already known object zones.
 	 *
-	 * @param int $maxItems Max items
-	 * @param int $entity   Entity id
+	 * @param int    $maxItems      Max items
+	 * @param int    $entity        Entity id
+	 * @param string $categoryField Category field to refresh
 	 * @return array<string,int>
 	 */
-	public function refreshObjectCategories($maxItems = 50, $entity = 0)
+	public function refreshObjectCategories($maxItems = 50, $entity = 0, $categoryField = '')
 	{
 		global $conf;
 
 		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
 		$maxItems = max(1, (int) $maxItems);
 		$stats = array('processed' => 0, 'ok' => 0, 'failed' => 0, 'remaining' => 0);
-		$total = $this->countRefreshableObjectCategories($entity);
+		$categoryField = trim((string) $categoryField);
+		$categoryFields = self::getRefreshableCategoryFields();
+		if ($categoryField !== '') {
+			if (empty($categoryFields[$categoryField])) {
+				$this->error = 'InvalidCategoryField';
+				$stats['failed']++;
+				return $stats;
+			}
+			if (empty($categoryFields[$categoryField]['supported'])) {
+				$this->error = 'LmdbZoningCategoryRefreshUnsupported';
+				return $stats;
+			}
+		}
+		$total = $this->countRefreshableObjectCategories($entity, $categoryField);
 		$sql = 'SELECT oz.rowid, oz.element_type, oz.fk_element, p.ref as profile_ref';
 		$sql .= ' FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as oz';
 		$sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'lmdbzoning_profile as p ON p.rowid = oz.fk_profile';
@@ -572,6 +621,9 @@ class LmdbZoningService
 		$sql .= " AND oz.element_type <> ''";
 		$sql .= ' AND oz.fk_element > 0';
 		$sql .= " AND oz.calculation_status IN ('ok', 'out_of_range', 'failed', 'pending')";
+		if ($categoryField !== '') {
+			$sql .= $this->buildRefreshCategoryFieldWhere($categoryField, 'oz.element_type');
+		}
 		$sql .= ' ORDER BY '.$this->getElementTypePrioritySql('oz.element_type').', CASE WHEN oz.fk_categorie IS NOT NULL THEN 0 ELSE 1 END, CASE WHEN oz.calculation_status IN (\'ok\', \'out_of_range\', \'failed\') THEN 0 ELSE 1 END, oz.tms ASC, oz.rowid ASC';
 		$sql .= $this->db->plimit($maxItems);
 		$resql = $this->db->query($sql);
@@ -983,13 +1035,16 @@ class LmdbZoningService
 	 * @param int $entity Entity id
 	 * @return int
 	 */
-	private function countRefreshableObjectCategories($entity)
+	private function countRefreshableObjectCategories($entity, $categoryField = '')
 	{
 		$sql = 'SELECT COUNT(*) as nb FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as oz';
 		$sql .= ' WHERE oz.entity = '.((int) $entity);
 		$sql .= " AND oz.element_type <> ''";
 		$sql .= ' AND oz.fk_element > 0';
 		$sql .= " AND oz.calculation_status IN ('ok', 'out_of_range', 'failed', 'pending')";
+		if ($categoryField !== '') {
+			$sql .= $this->buildRefreshCategoryFieldWhere($categoryField, 'oz.element_type');
+		}
 		$resql = $this->db->query($sql);
 		if (!$resql) {
 			$this->error = $this->db->lasterror();
@@ -998,6 +1053,30 @@ class LmdbZoningService
 		$row = $this->db->fetch_object($resql);
 
 		return $row ? (int) $row->nb : 0;
+	}
+
+	/**
+	 * Build SQL WHERE fragment for a category refresh field.
+	 *
+	 * @param string $categoryField Category field
+	 * @param string $sqlField      SQL element type field
+	 * @return string
+	 */
+	private function buildRefreshCategoryFieldWhere($categoryField, $sqlField)
+	{
+		$categoryFields = self::getRefreshableCategoryFields();
+		if (empty($categoryFields[$categoryField]['element_types']) || !is_array($categoryFields[$categoryField]['element_types'])) {
+			return ' AND 1 = 0';
+		}
+		$elementTypes = array();
+		foreach ($categoryFields[$categoryField]['element_types'] as $elementType) {
+			$elementTypes[] = "'".$this->db->escape($elementType)."'";
+		}
+		if (empty($elementTypes)) {
+			return ' AND 1 = 0';
+		}
+
+		return ' AND '.$sqlField.' IN ('.implode(',', array_values(array_unique($elementTypes))).')';
 	}
 
 	/**
