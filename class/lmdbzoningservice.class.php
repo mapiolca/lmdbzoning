@@ -46,20 +46,20 @@ class LmdbZoningService
 	public static function getZonableObjectDefinitions($onlyAvailable = 0)
 	{
 		$definitions = array(
-			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_field' => 'fk_categorie_societe', 'address_strategy' => 'self', 'category_priority' => 10),
-			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_id' => 4, 'category_field' => 'fk_categorie_contact', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30),
-			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal', 'module' => 'propal', 'table_element' => 'propal', 'category_type_id' => 23, 'category_field' => 'fk_categorie_propal', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
-			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande', 'module' => 'commande', 'table_element' => 'commande', 'category_type_id' => 16, 'category_field' => 'fk_categorie_commande', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_link_type' => 'societe', 'category_field' => 'fk_categorie_societe', 'address_strategy' => 'self', 'category_priority' => 10),
+			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_id' => 4, 'category_link_type' => 'contact', 'category_field' => 'fk_categorie_contact', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30),
+			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal', 'module' => 'propal', 'table_element' => 'propal', 'category_type_id' => 23, 'category_link_type' => 'propal', 'category_field' => 'fk_categorie_propal', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande', 'module' => 'commande', 'table_element' => 'commande', 'category_type_id' => 16, 'category_link_type' => 'commande', 'category_field' => 'fk_categorie_commande', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
 			'order' => array('alias' => 'commande'),
-			'facture' => array('file' => '/compta/facture/class/facture.class.php', 'class' => 'Facture', 'module' => 'facture', 'table_element' => 'facture', 'category_type_id' => 17, 'category_field' => 'fk_categorie_facture', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'facture' => array('file' => '/compta/facture/class/facture.class.php', 'class' => 'Facture', 'module' => 'facture', 'table_element' => 'facture', 'category_type_id' => 17, 'category_link_type' => 'facture', 'category_field' => 'fk_categorie_facture', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
 			'invoice' => array('alias' => 'facture'),
-			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat', 'module' => 'contrat', 'table_element' => 'contrat', 'category_type_id' => null, 'category_field' => 'fk_categorie_contract', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat', 'module' => 'contrat', 'table_element' => 'contrat', 'category_type_id' => null, 'category_link_type' => 'contract', 'category_field' => 'fk_categorie_contract', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
 			'contrat' => array('alias' => 'contract'),
-			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project', 'module' => 'project', 'table_element' => 'projet', 'category_type_id' => 6, 'category_field' => 'fk_categorie_project', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 20),
+			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project', 'module' => 'project', 'table_element' => 'projet', 'category_type_id' => 6, 'category_link_type' => 'project', 'category_field' => 'fk_categorie_project', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 20),
 			'projet' => array('alias' => 'project'),
-			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter', 'module' => 'ficheinter', 'table_element' => 'fichinter', 'category_type_id' => 14, 'category_field' => 'fk_categorie_fichinter', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
-			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek', 'module' => 'timesheetweek', 'table_element' => 'timesheet_week', 'category_type_id' => 450003, 'category_field' => 'fk_categorie_timesheetweek', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
-			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_id' => 450004, 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30),
+			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter', 'module' => 'ficheinter', 'table_element' => 'fichinter', 'category_type_id' => 14, 'category_link_type' => 'fichinter', 'category_field' => 'fk_categorie_fichinter', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek', 'module' => 'timesheetweek', 'table_element' => 'timesheet_week', 'category_type_id' => 450003, 'category_link_type' => 'timesheetweek', 'category_field' => 'fk_categorie_timesheetweek', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_id' => 450004, 'category_link_type' => 'powerplantpv', 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30),
 		);
 
 		foreach ($definitions as $elementType => $definition) {
@@ -402,16 +402,17 @@ class LmdbZoningService
 		if (!$object) {
 			return -1;
 		}
-		$type = $this->getCategoryTypeForElement($elementType);
-		if ($type === '') {
+		$linkType = $this->getCategoryLinkTypeForElement($elementType);
+		if ($linkType === '') {
+			return 0;
+		}
+		if (!$this->categoryLinkTableExists($linkType)) {
+			dol_syslog(__METHOD__.' category link table missing linkType='.$linkType.' elementType='.$elementType, LOG_WARNING);
 			return 0;
 		}
 		$category = new Categorie($this->db);
 		if ($category->fetch((int) $zoneResult['fk_categorie']) <= 0) {
 			return -1;
-		}
-		if (!empty($category->type)) {
-			$type = (int) $category->type;
 		}
 		if (!$this->isCategoryInEntityScope($category, $entity)) {
 			$this->error = 'CategoryEntityMismatch';
@@ -421,8 +422,8 @@ class LmdbZoningService
 			return 0;
 		}
 
-		$this->removeKnownZoneCategories($object, $type, $zoneResult);
-		$result = $category->add_type($object, $type);
+		$this->removeKnownZoneCategories($object, $linkType, $zoneResult);
+		$result = $category->add_type($object, $linkType);
 		$this->logEvent('LMDBZONING_CATEGORY_APPLY', $elementType, (int) $fkElement, '', $zoneResult);
 
 		return $result < 0 ? -1 : 1;
@@ -1662,6 +1663,40 @@ class LmdbZoningService
 	}
 
 	/**
+	 * Return Dolibarr category link type.
+	 *
+	 * @param string $elementType Element type
+	 * @return string
+	 */
+	private function getCategoryLinkTypeForElement($elementType)
+	{
+		$definition = self::getZonableObjectDefinition($elementType);
+
+		return !empty($definition['category_link_type']) ? (string) $definition['category_link_type'] : '';
+	}
+
+	/**
+	 * Check if a Dolibarr category link table exists.
+	 *
+	 * @param string $linkType Category link type
+	 * @return bool
+	 */
+	private function categoryLinkTableExists($linkType)
+	{
+		$linkType = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $linkType);
+		if ($linkType === '') {
+			return false;
+		}
+		$sql = "SHOW TABLES LIKE '".$this->db->escape(MAIN_DB_PREFIX.'categorie_'.$linkType)."'";
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return false;
+		}
+
+		return (bool) $this->db->num_rows($resql);
+	}
+
+	/**
 	 * Build SQL CASE expression for element type category priority.
 	 *
 	 * @param string $field SQL field expression
@@ -1686,9 +1721,12 @@ class LmdbZoningService
 	 * @param array<string,mixed> $zoneResult Zone result
 	 * @return void
 	 */
-	private function removeKnownZoneCategories($object, $type, array $zoneResult)
+	private function removeKnownZoneCategories($object, $linkType, array $zoneResult)
 	{
 		if (empty($zoneResult['fk_profile']) || !class_exists('Categorie')) {
+			return;
+		}
+		if (!$this->categoryLinkTableExists($linkType)) {
 			return;
 		}
 		$sql = 'SELECT fk_categorie_default, fk_categorie_societe, fk_categorie_contact, fk_categorie_powerplantpv, fk_categorie_propal, fk_categorie_commande, fk_categorie_facture, fk_categorie_contract, fk_categorie_project, fk_categorie_fichinter, fk_categorie_timesheetweek';
@@ -1705,7 +1743,7 @@ class LmdbZoningService
 				}
 				$category = new Categorie($this->db);
 				if ($category->fetch((int) $fkcat) > 0 && method_exists($category, 'del_type')) {
-					$category->del_type($object, $type);
+					$category->del_type($object, $linkType);
 				}
 			}
 		}
