@@ -165,4 +165,4 @@ LmdbZoningEventCategoryApply=Application de catégorie
 LmdbZoningEventObjectOverride=Forçage manuel de zone
 LmdbZoningEventObjectClearOverride=Suppression du forçage manuel
 ForceRecalculation=Forcer le recalcul
-LmdbZoningForcedRecalculationDone=Recalcul forcé : %s lignes mises en attente, %s traitées, %s réussies, %s en erreur, %s restantes.
+LmdbZoningForcedRecalculationDone=Recalcul forcé : %s lignes mises en attente, %s traitées, %s réussies, %s en erreur, %s restantes, %s reportées par limite de lot.

@@ -528,21 +528,36 @@ class LmdbZoningService
 		global $conf;
 
 		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
-		$stats = array('queued' => 0, 'processed' => 0, 'ok' => 0, 'failed' => 0, 'remaining' => 0, 'skipped' => 0);
+		$maxItems = max(1, (int) $maxItems);
+		$stats = array('queued' => 0, 'processed' => 0, 'ok' => 0, 'failed' => 0, 'remaining' => 0, 'skipped' => 0, 'skipped_due_to_limit' => 0);
 		if (empty($profile->id) || empty($profile->ref)) {
 			$this->error = 'ProfileNotFound';
 			$stats['failed']++;
 			return $stats;
 		}
 
+		dol_syslog(__METHOD__.' start profile='.(int) $profile->id.' maxItems='.$maxItems.' entity='.$entity, LOG_INFO);
 		foreach (self::getZonableObjectDefinitions(1) as $elementType => $definition) {
 			if ($this->isAliasElementType($elementType)) {
 				continue;
 			}
-			$objectIds = $this->fetchZonableObjectIds($definition, $entity);
+			$remainingQueueSlots = $maxItems - $stats['queued'];
+			if ($remainingQueueSlots <= 0) {
+				$stats['skipped_due_to_limit']++;
+				break;
+			}
+			$objectIds = $this->fetchZonableObjectIds($definition, $entity, (int) $profile->id, $elementType, $remainingQueueSlots + 1);
 			if (!is_array($objectIds)) {
 				$stats['failed']++;
+				if (!empty($this->error)) {
+					$this->errors[] = $elementType.': '.$this->error;
+					dol_syslog(__METHOD__.' fetch failed elementType='.$elementType.' error='.$this->error, LOG_WARNING);
+				}
 				continue;
+			}
+			if (count($objectIds) > $remainingQueueSlots) {
+				$stats['skipped_due_to_limit'] += count($objectIds) - $remainingQueueSlots;
+				$objectIds = array_slice($objectIds, 0, $remainingQueueSlots);
 			}
 			foreach ($objectIds as $fkElement) {
 				$result = $this->markObjectZonePending($elementType, (int) $fkElement, $profile, $entity);
@@ -553,12 +568,16 @@ class LmdbZoningService
 				} else {
 					$stats['skipped']++;
 				}
+				if ($stats['queued'] >= $maxItems) {
+					break;
+				}
 			}
 		}
 
-		$todo = $this->fetchPendingProfileRows((int) $profile->id, (int) $maxItems, $entity);
+		$todo = $this->fetchPendingProfileRows((int) $profile->id, $maxItems, $entity);
 		if (!is_array($todo)) {
 			$stats['failed']++;
+			dol_syslog(__METHOD__.' fetch pending failed profile='.(int) $profile->id.' error='.$this->error, LOG_WARNING);
 			return $stats;
 		}
 		foreach ($todo as $row) {
@@ -571,6 +590,7 @@ class LmdbZoningService
 			}
 		}
 		$stats['remaining'] = $this->countPendingProfileRows((int) $profile->id, $entity);
+		dol_syslog(__METHOD__.' done profile='.(int) $profile->id.' queued='.$stats['queued'].' processed='.$stats['processed'].' ok='.$stats['ok'].' failed='.$stats['failed'].' remaining='.$stats['remaining'].' skipped_due_to_limit='.$stats['skipped_due_to_limit'], $stats['failed'] > 0 ? LOG_WARNING : LOG_INFO);
 
 		return $stats;
 	}
@@ -656,9 +676,12 @@ class LmdbZoningService
 	 *
 	 * @param array<string,mixed> $definition Object definition
 	 * @param int                 $entity Entity id
+	 * @param int                 $profileId Profile id
+	 * @param string              $elementType Element type
+	 * @param int                 $limit Maximum ids to fetch
 	 * @return array<int,int>|false
 	 */
-	private function fetchZonableObjectIds(array $definition, $entity)
+	private function fetchZonableObjectIds(array $definition, $entity, $profileId = 0, $elementType = '', $limit = 0)
 	{
 		$table = !empty($definition['table_element']) ? (string) $definition['table_element'] : '';
 		if ($table === '') {
@@ -666,6 +689,23 @@ class LmdbZoningService
 		}
 
 		$sql = 'SELECT t.rowid FROM '.MAIN_DB_PREFIX.$table.' as t WHERE 1 = 1';
+		if ($profileId > 0 && $elementType !== '') {
+			$sql = 'SELECT t.rowid, MIN(CASE WHEN oz.rowid IS NULL THEN 0 ELSE 1 END) as has_object_zone, MIN(oz.date_calculation) as oldest_date_calculation';
+			$sql .= ' FROM '.MAIN_DB_PREFIX.$table.' as t';
+			$sql .= ' LEFT JOIN '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as oz ON oz.entity = '.((int) $entity);
+			$sql .= ' AND oz.fk_profile = '.((int) $profileId);
+			$sql .= " AND oz.element_type = '".$this->db->escape($elementType)."'";
+			$sql .= ' AND oz.fk_element = t.rowid';
+			$sql .= ' WHERE 1 = 1';
+			$sql .= ' AND NOT EXISTS (';
+			$sql .= 'SELECT 1 FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as ozp';
+			$sql .= ' WHERE ozp.entity = '.((int) $entity);
+			$sql .= ' AND ozp.fk_profile = '.((int) $profileId);
+			$sql .= " AND ozp.element_type = '".$this->db->escape($elementType)."'";
+			$sql .= ' AND ozp.fk_element = t.rowid';
+			$sql .= " AND ozp.calculation_status = 'pending'";
+			$sql .= ')';
+		}
 		if ($this->tableHasColumn($table, 'entity')) {
 			$sql .= ' AND t.entity IN ('.$this->getEntityFilter($table, $entity).')';
 		}
@@ -674,7 +714,15 @@ class LmdbZoningService
 		} elseif ($this->tableHasColumn($table, 'status')) {
 			$sql .= ' AND t.status >= 0';
 		}
-		$sql .= ' ORDER BY t.rowid ASC';
+		if ($profileId > 0 && $elementType !== '') {
+			$sql .= ' GROUP BY t.rowid';
+			$sql .= ' ORDER BY has_object_zone ASC, oldest_date_calculation ASC, t.rowid ASC';
+		} else {
+			$sql .= ' ORDER BY t.rowid ASC';
+		}
+		if ($limit > 0) {
+			$sql .= $this->db->plimit((int) $limit);
+		}
 		$resql = $this->db->query($sql);
 		if (!$resql) {
 			$this->error = $this->db->lasterror();
