@@ -52,6 +52,18 @@ if ($fk_profile > 0 && method_exists($user, 'hasRight') && $user->hasRight('lmdb
 	$buttons .= '</form>';
 }
 print load_fiche_titre($langs->trans('Zones'), $buttons, 'object_lmdbzoning@lmdbzoning');
+print '<style>
+.lmdbzoning-profile-zone-list .lmdbzoning-category-link a,
+.lmdbzoning-profile-zone-list .lmdbzoning-category-link a:link,
+.lmdbzoning-profile-zone-list .lmdbzoning-category-link a:visited,
+.lmdbzoning-profile-zone-list .lmdbzoning-category-link a:hover,
+.lmdbzoning-profile-zone-list .lmdbzoning-category-link a:active,
+.lmdbzoning-profile-zone-list .lmdbzoning-category-link a * {
+	color: #000 !important;
+}
+</style>';
+print '<div class="lmdbzoning-profile-zone-list">';
 lmdbzoning_print_object_list($object, '', 'profile_zone_card.php', $filters);
+print '</div>';
 llxFooter();
 $db->close();

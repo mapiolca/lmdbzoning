@@ -673,7 +673,11 @@ function lmdbzoning_render_fk_output($field, array $definition, $value)
 	$object = new $className($GLOBALS['db']);
 	if (method_exists($object, 'fetch') && $object->fetch($value) > 0) {
 		if (method_exists($object, 'getNomUrl')) {
-			return $object->getNomUrl(1);
+			$html = $object->getNomUrl(1);
+			if ($target['class'] === 'Categorie') {
+				return '<span class="lmdbzoning-category-link">'.$html.'</span>';
+			}
+			return $html;
 		}
 		if (!empty($object->label)) {
 			return dol_escape_htmltag($object->label);
