@@ -18,7 +18,7 @@ class modLmdbZoning extends DolibarrModules
 		global $conf, $langs;
 
 		$this->db = $db;
-		$this->numero = 450021;
+		$this->numero = 450022;
 		$this->rights_class = 'lmdbzoning';
 		$this->family = 'technic';
 		$this->module_position = 500;
