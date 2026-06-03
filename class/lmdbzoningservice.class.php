@@ -46,20 +46,20 @@ class LmdbZoningService
 	public static function getZonableObjectDefinitions($onlyAvailable = 0)
 	{
 		$definitions = array(
-			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_field' => 'fk_categorie_societe', 'address_strategy' => 'self'),
-			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_id' => 4, 'category_field' => 'fk_categorie_contact', 'address_strategy' => 'self_then_thirdparty'),
-			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal', 'module' => 'propal', 'table_element' => 'propal', 'category_type_id' => 23, 'category_field' => 'fk_categorie_propal', 'address_strategy' => 'thirdparty'),
-			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande', 'module' => 'commande', 'table_element' => 'commande', 'category_type_id' => 16, 'category_field' => 'fk_categorie_commande', 'address_strategy' => 'thirdparty'),
+			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_field' => 'fk_categorie_societe', 'address_strategy' => 'self', 'category_priority' => 10),
+			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_id' => 4, 'category_field' => 'fk_categorie_contact', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30),
+			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal', 'module' => 'propal', 'table_element' => 'propal', 'category_type_id' => 23, 'category_field' => 'fk_categorie_propal', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande', 'module' => 'commande', 'table_element' => 'commande', 'category_type_id' => 16, 'category_field' => 'fk_categorie_commande', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
 			'order' => array('alias' => 'commande'),
-			'facture' => array('file' => '/compta/facture/class/facture.class.php', 'class' => 'Facture', 'module' => 'facture', 'table_element' => 'facture', 'category_type_id' => 17, 'category_field' => 'fk_categorie_facture', 'address_strategy' => 'thirdparty'),
+			'facture' => array('file' => '/compta/facture/class/facture.class.php', 'class' => 'Facture', 'module' => 'facture', 'table_element' => 'facture', 'category_type_id' => 17, 'category_field' => 'fk_categorie_facture', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
 			'invoice' => array('alias' => 'facture'),
-			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat', 'module' => 'contrat', 'table_element' => 'contrat', 'category_type_id' => null, 'category_field' => 'fk_categorie_contract', 'address_strategy' => 'thirdparty'),
+			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat', 'module' => 'contrat', 'table_element' => 'contrat', 'category_type_id' => null, 'category_field' => 'fk_categorie_contract', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
 			'contrat' => array('alias' => 'contract'),
-			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project', 'module' => 'project', 'table_element' => 'projet', 'category_type_id' => 6, 'category_field' => 'fk_categorie_project', 'address_strategy' => 'self_then_thirdparty'),
+			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project', 'module' => 'project', 'table_element' => 'projet', 'category_type_id' => 6, 'category_field' => 'fk_categorie_project', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 20),
 			'projet' => array('alias' => 'project'),
-			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter', 'module' => 'ficheinter', 'table_element' => 'fichinter', 'category_type_id' => 14, 'category_field' => 'fk_categorie_fichinter', 'address_strategy' => 'thirdparty'),
-			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek', 'module' => 'timesheetweek', 'table_element' => 'timesheet_week', 'category_type_id' => 450003, 'category_field' => 'fk_categorie_timesheetweek', 'address_strategy' => 'thirdparty'),
-			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_id' => 450004, 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty'),
+			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter', 'module' => 'ficheinter', 'table_element' => 'fichinter', 'category_type_id' => 14, 'category_field' => 'fk_categorie_fichinter', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek', 'module' => 'timesheetweek', 'table_element' => 'timesheet_week', 'category_type_id' => 450003, 'category_field' => 'fk_categorie_timesheetweek', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_id' => 450004, 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30),
 		);
 
 		foreach ($definitions as $elementType => $definition) {
@@ -82,6 +82,33 @@ class LmdbZoningService
 		}
 
 		return $available;
+	}
+
+	/**
+	 * Return zonable object definitions ordered by category assignment priority.
+	 *
+	 * @param int $onlyAvailable 1=only entries with enabled module and usable category type
+	 * @return array<string,array<string,mixed>>
+	 */
+	public static function getOrderedZonableObjectDefinitions($onlyAvailable = 0)
+	{
+		$definitions = self::getZonableObjectDefinitions($onlyAvailable);
+		$positions = array();
+		$position = 0;
+		foreach ($definitions as $elementType => $definition) {
+			$positions[$elementType] = $position++;
+		}
+		uksort($definitions, function ($left, $right) use ($definitions, $positions) {
+			$leftPriority = isset($definitions[$left]['category_priority']) ? (int) $definitions[$left]['category_priority'] : 30;
+			$rightPriority = isset($definitions[$right]['category_priority']) ? (int) $definitions[$right]['category_priority'] : 30;
+			if ($leftPriority === $rightPriority) {
+				return $positions[$left] <=> $positions[$right];
+			}
+
+			return $leftPriority <=> $rightPriority;
+		});
+
+		return $definitions;
 	}
 
 	/**
@@ -502,7 +529,7 @@ class LmdbZoningService
 			$sql .= " OR oz.calculation_status = 'failed'";
 		}
 		$sql .= ')';
-		$sql .= ' ORDER BY oz.date_calculation ASC, oz.rowid ASC';
+		$sql .= ' ORDER BY '.$this->getElementTypePrioritySql('oz.element_type').', oz.date_calculation ASC, oz.rowid ASC';
 		$sql .= $this->db->plimit((int) $maxItems);
 		$resql = $this->db->query($sql);
 		if (!$resql) {
@@ -545,7 +572,7 @@ class LmdbZoningService
 		$sql .= " AND oz.element_type <> ''";
 		$sql .= ' AND oz.fk_element > 0';
 		$sql .= " AND oz.calculation_status IN ('ok', 'out_of_range', 'failed', 'pending')";
-		$sql .= ' ORDER BY CASE WHEN oz.fk_categorie IS NOT NULL THEN 0 ELSE 1 END, CASE WHEN oz.calculation_status IN (\'ok\', \'out_of_range\', \'failed\') THEN 0 ELSE 1 END, oz.tms ASC, oz.rowid ASC';
+		$sql .= ' ORDER BY '.$this->getElementTypePrioritySql('oz.element_type').', CASE WHEN oz.fk_categorie IS NOT NULL THEN 0 ELSE 1 END, CASE WHEN oz.calculation_status IN (\'ok\', \'out_of_range\', \'failed\') THEN 0 ELSE 1 END, oz.tms ASC, oz.rowid ASC';
 		$sql .= $this->db->plimit($maxItems);
 		$resql = $this->db->query($sql);
 		if (!$resql) {
@@ -628,7 +655,7 @@ class LmdbZoningService
 
 		dol_syslog(__METHOD__.' start profile='.(int) $profile->id.' maxItems='.$maxItems.' entity='.$entity, LOG_INFO);
 		$initialPending = $this->countPendingProfileRows((int) $profile->id, $entity);
-		foreach (self::getZonableObjectDefinitions(1) as $elementType => $definition) {
+		foreach (self::getOrderedZonableObjectDefinitions(1) as $elementType => $definition) {
 			if ($this->isAliasElementType($elementType)) {
 				continue;
 			}
@@ -1446,6 +1473,23 @@ class LmdbZoningService
 		$definition = self::getZonableObjectDefinition($elementType);
 
 		return isset($definition['category_type_id']) && $definition['category_type_id'] !== null ? (int) $definition['category_type_id'] : '';
+	}
+
+	/**
+	 * Build SQL CASE expression for element type category priority.
+	 *
+	 * @param string $field SQL field expression
+	 * @return string
+	 */
+	private function getElementTypePrioritySql($field)
+	{
+		$cases = array();
+		foreach (self::getOrderedZonableObjectDefinitions(0) as $elementType => $definition) {
+			$priority = isset($definition['category_priority']) ? (int) $definition['category_priority'] : 30;
+			$cases[] = "WHEN '".$this->db->escape($elementType)."' THEN ".$priority;
+		}
+
+		return 'CASE '.$field.' '.implode(' ', $cases).' ELSE 30 END';
 	}
 
 	/**
