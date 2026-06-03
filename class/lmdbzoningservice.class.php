@@ -46,7 +46,7 @@ class LmdbZoningService
 	public static function getZonableObjectDefinitions($onlyAvailable = 0)
 	{
 		$definitions = array(
-			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_link_type' => 'societe', 'category_field' => 'fk_categorie_societe', 'address_strategy' => 'self', 'category_priority' => 10),
+			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_link_type' => 'soc', 'category_link_table' => 'categorie_societe', 'category_field' => 'fk_categorie_societe', 'address_strategy' => 'self', 'category_priority' => 10),
 			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_id' => 4, 'category_link_type' => 'contact', 'category_field' => 'fk_categorie_contact', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30),
 			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal', 'module' => 'propal', 'table_element' => 'propal', 'category_type_id' => 23, 'category_link_type' => 'propal', 'category_field' => 'fk_categorie_propal', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
 			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande', 'module' => 'commande', 'table_element' => 'commande', 'category_type_id' => 16, 'category_link_type' => 'commande', 'category_field' => 'fk_categorie_commande', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
@@ -406,7 +406,7 @@ class LmdbZoningService
 		if ($linkType === '') {
 			return 0;
 		}
-		if (!$this->categoryLinkTableExists($linkType)) {
+		if (!$this->categoryLinkTableExists($elementType, $linkType)) {
 			dol_syslog(__METHOD__.' category link table missing linkType='.$linkType.' elementType='.$elementType, LOG_WARNING);
 			return 0;
 		}
@@ -422,7 +422,7 @@ class LmdbZoningService
 			return 0;
 		}
 
-		$this->removeKnownZoneCategories($object, $linkType, $zoneResult);
+		$this->removeKnownZoneCategories($object, $elementType, $linkType, $zoneResult);
 		$result = $category->add_type($object, $linkType);
 		$this->logEvent('LMDBZONING_CATEGORY_APPLY', $elementType, (int) $fkElement, '', $zoneResult);
 
@@ -1681,13 +1681,19 @@ class LmdbZoningService
 	 * @param string $linkType Category link type
 	 * @return bool
 	 */
-	private function categoryLinkTableExists($linkType)
+	private function categoryLinkTableExists($elementType, $linkType)
 	{
 		$linkType = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $linkType);
 		if ($linkType === '') {
 			return false;
 		}
-		$sql = "SHOW TABLES LIKE '".$this->db->escape(MAIN_DB_PREFIX.'categorie_'.$linkType)."'";
+		$definition = self::getZonableObjectDefinition($elementType);
+		$tableName = !empty($definition['category_link_table']) ? (string) $definition['category_link_table'] : 'categorie_'.$linkType;
+		$tableName = preg_replace('/[^a-zA-Z0-9_]/', '', $tableName);
+		if ($tableName === '') {
+			return false;
+		}
+		$sql = "SHOW TABLES LIKE '".$this->db->escape(MAIN_DB_PREFIX.$tableName)."'";
 		$resql = $this->db->query($sql);
 		if (!$resql) {
 			return false;
@@ -1721,12 +1727,12 @@ class LmdbZoningService
 	 * @param array<string,mixed> $zoneResult Zone result
 	 * @return void
 	 */
-	private function removeKnownZoneCategories($object, $linkType, array $zoneResult)
+	private function removeKnownZoneCategories($object, $elementType, $linkType, array $zoneResult)
 	{
 		if (empty($zoneResult['fk_profile']) || !class_exists('Categorie')) {
 			return;
 		}
-		if (!$this->categoryLinkTableExists($linkType)) {
+		if (!$this->categoryLinkTableExists($elementType, $linkType)) {
 			return;
 		}
 		$sql = 'SELECT fk_categorie_default, fk_categorie_societe, fk_categorie_contact, fk_categorie_powerplantpv, fk_categorie_propal, fk_categorie_commande, fk_categorie_facture, fk_categorie_contract, fk_categorie_project, fk_categorie_fichinter, fk_categorie_timesheetweek';
