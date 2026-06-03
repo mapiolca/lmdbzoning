@@ -1,0 +1,1 @@
+-- Default data is created by the interactive setup wizard, not silently at activation.

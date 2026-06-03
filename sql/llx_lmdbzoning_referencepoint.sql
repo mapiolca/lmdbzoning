@@ -1,0 +1,21 @@
+CREATE TABLE llx_lmdbzoning_referencepoint (
+	rowid integer AUTO_INCREMENT PRIMARY KEY,
+	entity integer DEFAULT 1 NOT NULL,
+	ref varchar(128) NOT NULL,
+	label varchar(255) NOT NULL,
+	address varchar(255),
+	zip varchar(25),
+	town varchar(128),
+	country_code varchar(10),
+	latitude double,
+	longitude double,
+	geocode_status varchar(32),
+	geocode_source varchar(64),
+	geocode_score double,
+	active tinyint DEFAULT 1 NOT NULL,
+	datec datetime,
+	tms timestamp DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+	fk_user_creat integer,
+	fk_user_modif integer,
+	import_key varchar(14)
+) ENGINE=innodb;

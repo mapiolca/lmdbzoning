@@ -1,0 +1,5 @@
+ALTER TABLE llx_lmdbzoning_calculation_log ADD INDEX idx_lmdbzoning_calculation_log_entity (entity);
+ALTER TABLE llx_lmdbzoning_calculation_log ADD INDEX idx_lmdbzoning_calculation_log_objectzone (fk_object_zone);
+ALTER TABLE llx_lmdbzoning_calculation_log ADD INDEX idx_lmdbzoning_calculation_log_event (event_code);
+ALTER TABLE llx_lmdbzoning_calculation_log ADD INDEX idx_lmdbzoning_calculation_log_object (element_type, fk_element);
+ALTER TABLE llx_lmdbzoning_calculation_log ADD INDEX idx_lmdbzoning_calculation_log_datec (datec);

@@ -1,0 +1,900 @@
+<?php
+/* Copyright (C) 2026  Pierre Ardoin <developpeur@lesmetiersdubatiment.fr> */
+
+dol_include_once('/lmdbzoning/class/geocoder.class.php');
+dol_include_once('/lmdbzoning/class/referencepoint.class.php');
+dol_include_once('/lmdbzoning/class/lmdbzoningprofile.class.php');
+dol_include_once('/lmdbzoning/class/lmdbzoningprofilezone.class.php');
+dol_include_once('/lmdbzoning/class/lmdbzoningobjectzone.class.php');
+dol_include_once('/lmdbzoning/class/lmdbzoningcalculationlog.class.php');
+
+/**
+ * Main reusable LmdbZoning service.
+ */
+class LmdbZoningService
+{
+	/** @var DoliDB */
+	private $db;
+
+	/** @var LmdbZoningGeocoder */
+	private $geocoder;
+
+	/** @var string */
+	public $error = '';
+
+	/** @var array<int,string> */
+	public $errors = array();
+
+	/**
+	 * Constructor.
+	 *
+	 * @param DoliDB              $db       Database handler
+	 * @param LmdbZoningGeocoder|null $geocoder Optional geocoder
+	 */
+	public function __construct($db, $geocoder = null)
+	{
+		$this->db = $db;
+		$this->geocoder = $geocoder ?: new LmdbZoningGeocoder($db);
+	}
+
+	/**
+	 * Calculate a zone for an address.
+	 *
+	 * @param array<string,mixed> $address    Address fields
+	 * @param string              $profileRef Profile reference
+	 * @param int                 $entity     Entity id
+	 * @return array<string,mixed>
+	 */
+	public function calculateZoneForAddress(array $address, $profileRef, $entity = 0)
+	{
+		global $conf;
+
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+		$profile = $this->fetchProfileByRef($profileRef, $entity);
+		if (!$profile) {
+			return $this->failedResult('ProfileNotFound');
+		}
+		$referencePoint = new LmdbZoningReferencePoint($this->db);
+		if ($referencePoint->fetch((int) $profile->fk_referencepoint) <= 0) {
+			return $this->failedResult('ReferencePointNotFound');
+		}
+		if (!$this->geocoder->hasValidCoordinates($referencePoint->getAddressArray())) {
+			return $this->failedResult('ReferencePointCoordinatesMissing');
+		}
+
+		$geocode = $this->geocoder->geocode($address, $entity, 0);
+		if (empty($geocode['status']) || $geocode['status'] !== LmdbZoningGeocoder::STATUS_OK) {
+			return array(
+				'status' => isset($geocode['status']) ? $geocode['status'] : 'failed',
+				'zone_code' => '',
+				'zone_label' => '',
+				'distance_km' => null,
+				'fk_zone' => null,
+				'fk_categorie' => null,
+				'latitude' => isset($geocode['latitude']) ? $geocode['latitude'] : null,
+				'longitude' => isset($geocode['longitude']) ? $geocode['longitude'] : null,
+				'address_hash' => isset($geocode['address_hash']) ? $geocode['address_hash'] : '',
+				'message' => isset($geocode['message']) ? $geocode['message'] : 'GeocodingFailed',
+			);
+		}
+
+		$distance = $this->getAirDistanceKm((float) $referencePoint->latitude, (float) $referencePoint->longitude, (float) $geocode['latitude'], (float) $geocode['longitude']);
+		$zone = $this->findZoneForDistance((int) $profile->id, $distance, $entity);
+		if (!$zone) {
+			return array(
+				'status' => 'out_of_range',
+				'zone_code' => '',
+				'zone_label' => '',
+				'distance_km' => round($distance, 2),
+				'fk_zone' => null,
+				'fk_categorie' => null,
+				'latitude' => $geocode['latitude'],
+				'longitude' => $geocode['longitude'],
+				'address_hash' => $geocode['address_hash'],
+				'message' => 'NoMatchingZone',
+			);
+		}
+
+		return array(
+			'status' => 'ok',
+			'profile_ref' => $profile->ref,
+			'fk_profile' => (int) $profile->id,
+			'fk_referencepoint' => (int) $referencePoint->id,
+			'zone_code' => $zone->zone_code,
+			'zone_label' => $zone->label,
+			'distance_km' => round($distance, 2),
+			'distance_raw_km' => $distance,
+			'fk_zone' => (int) $zone->id,
+			'fk_categorie' => $this->getCategoryForElementType($zone, isset($address['element_type']) ? $address['element_type'] : ''),
+			'latitude' => $geocode['latitude'],
+			'longitude' => $geocode['longitude'],
+			'address_hash' => $geocode['address_hash'],
+			'address_raw' => $this->addressToString($address),
+			'message' => '',
+		);
+	}
+
+	/**
+	 * Calculate and store a zone for a Dolibarr object.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $fkElement   Object id
+	 * @param string $profileRef  Profile ref
+	 * @param int    $entity      Entity id
+	 * @return array<string,mixed>
+	 */
+	public function calculateZoneForObject($elementType, $fkElement, $profileRef, $entity = 0)
+	{
+		global $conf, $user;
+
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+		$address = $this->fetchObjectAddress($elementType, (int) $fkElement);
+		if (!$address) {
+			$result = $this->failedResult('ObjectAddressNotFound');
+			$result['element_type'] = $elementType;
+			$result['fk_element'] = (int) $fkElement;
+			return $result;
+		}
+		$address['element_type'] = $elementType;
+		$result = $this->calculateZoneForAddress($address, $profileRef, $entity);
+		$this->storeObjectZoneResult($elementType, (int) $fkElement, $result, $entity);
+		if ($result['status'] === 'ok' && !empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY)) {
+			$this->applyZoneCategoryToObject($elementType, (int) $fkElement, $result);
+		}
+		$this->logEvent('LMDBZONING_OBJECT_CALCULATE', $elementType, (int) $fkElement, isset($result['message']) ? $result['message'] : '', $result);
+
+		return $result;
+	}
+
+	/**
+	 * Return stored zone for object.
+	 *
+	 * @param string      $elementType Object element type
+	 * @param int         $fkElement   Object id
+	 * @param string|null $profileRef  Profile ref
+	 * @param int         $entity      Entity id
+	 * @return array<string,mixed>|false
+	 */
+	public function getObjectZone($elementType, $fkElement, $profileRef = null, $entity = 0)
+	{
+		global $conf;
+
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+		$sql = 'SELECT oz.* FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as oz';
+		if ($profileRef !== null && $profileRef !== '') {
+			$sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'lmdbzoning_profile as p ON p.rowid = oz.fk_profile';
+		}
+		$sql .= ' WHERE oz.entity = '.((int) $entity);
+		$sql .= " AND oz.element_type = '".$this->db->escape($elementType)."'";
+		$sql .= ' AND oz.fk_element = '.((int) $fkElement);
+		if ($profileRef !== null && $profileRef !== '') {
+			$sql .= " AND p.ref = '".$this->db->escape($profileRef)."'";
+		}
+		$sql .= ' ORDER BY oz.rowid DESC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return false;
+		}
+		$obj = $this->db->fetch_object($resql);
+		if (!$obj) {
+			return false;
+		}
+
+		return $this->objectToArray($obj);
+	}
+
+	/**
+	 * Apply zone category to object when Dolibarr category API supports the target.
+	 *
+	 * @param string              $elementType Object element type
+	 * @param int                 $fkElement   Object id
+	 * @param array<string,mixed> $zoneResult  Zone result
+	 * @return int
+	 */
+	public function applyZoneCategoryToObject($elementType, $fkElement, array $zoneResult)
+	{
+		if (empty($zoneResult['fk_categorie'])) {
+			return 0;
+		}
+		if (!class_exists('Categorie')) {
+			require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
+		}
+		if (!class_exists('Categorie')) {
+			return 0;
+		}
+
+		$object = $this->fetchSupportedObject($elementType, (int) $fkElement);
+		if (!$object) {
+			return -1;
+		}
+		$type = $this->getCategoryTypeForElement($elementType);
+		if ($type === '') {
+			return 0;
+		}
+		$category = new Categorie($this->db);
+		if ($category->fetch((int) $zoneResult['fk_categorie']) <= 0) {
+			return -1;
+		}
+		if (isset($category->entity) && isset($object->entity) && (int) $category->entity !== (int) $object->entity) {
+			$this->error = 'CategoryEntityMismatch';
+			return -1;
+		}
+		if (!method_exists($category, 'add_type')) {
+			return 0;
+		}
+
+		$this->removeKnownZoneCategories($object, $type, $zoneResult);
+		$result = $category->add_type($object, $type);
+		$this->logEvent('LMDBZONING_CATEGORY_APPLY', $elementType, (int) $fkElement, '', $zoneResult);
+
+		return $result < 0 ? -1 : 1;
+	}
+
+	/**
+	 * Return the most unfavorable result by zone priority.
+	 *
+	 * @param array<int,array<string,mixed>> $zoneResults Zone results
+	 * @return array<string,mixed>
+	 */
+	public function consolidateZones(array $zoneResults)
+	{
+		$selected = array();
+		$selectedPriority = -PHP_INT_MAX;
+
+		foreach ($zoneResults as $result) {
+			if (empty($result['fk_zone'])) {
+				continue;
+			}
+			$zone = new LmdbZoningProfileZone($this->db);
+			if ($zone->fetch((int) $result['fk_zone']) <= 0) {
+				continue;
+			}
+			if ((int) $zone->priority > $selectedPriority) {
+				$selectedPriority = (int) $zone->priority;
+				$selected = $result;
+			}
+		}
+
+		return $selected;
+	}
+
+	/**
+	 * Force object zone manually.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $fkElement   Object id
+	 * @param string $zoneCode    Zone code
+	 * @param string $reason      Override reason
+	 * @param int    $userId      User id
+	 * @return int
+	 */
+	public function overrideZoneForObject($elementType, $fkElement, $zoneCode, $reason, $userId)
+	{
+		global $conf;
+
+		if (trim($reason) === '') {
+			$this->error = 'OverrideReasonRequired';
+			return -1;
+		}
+		if (empty($conf->global->LMDBZONING_ALLOW_MANUAL_OVERRIDE)) {
+			$this->error = 'ManualOverrideDisabled';
+			return -1;
+		}
+		$current = $this->getObjectZone($elementType, (int) $fkElement);
+		if (!$current) {
+			$this->error = 'ObjectZoneNotFound';
+			return -1;
+		}
+		$zone = $this->fetchZoneByCode((int) $current['fk_profile'], $zoneCode, (int) $current['entity']);
+		if (!$zone) {
+			$this->error = 'ZoneNotFound';
+			return -1;
+		}
+		$category = $this->getCategoryForElementType($zone, $elementType);
+		$sql = 'UPDATE '.MAIN_DB_PREFIX.'lmdbzoning_object_zone SET';
+		$sql .= " zone_code = '".$this->db->escape($zone->zone_code)."',";
+		$sql .= ' fk_zone = '.((int) $zone->id).',';
+		$sql .= ' fk_categorie = '.($category ? ((int) $category) : 'null').',';
+		$sql .= ' manual_override = 1,';
+		$sql .= " override_reason = '".$this->db->escape($reason)."',";
+		$sql .= " date_override = '".$this->db->idate(dol_now())."',";
+		$sql .= ' fk_user_override = '.((int) $userId);
+		$sql .= ' WHERE rowid = '.((int) $current['id']);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+
+		$this->logEvent('LMDBZONING_OBJECT_OVERRIDE', $elementType, (int) $fkElement, $reason, array('zone_code' => $zoneCode));
+		return 1;
+	}
+
+	/**
+	 * Clear manual override.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $fkElement   Object id
+	 * @param int    $userId      User id
+	 * @return int
+	 */
+	public function clearZoneOverride($elementType, $fkElement, $userId)
+	{
+		$current = $this->getObjectZone($elementType, (int) $fkElement);
+		if (!$current) {
+			$this->error = 'ObjectZoneNotFound';
+			return -1;
+		}
+		$sql = 'UPDATE '.MAIN_DB_PREFIX.'lmdbzoning_object_zone SET';
+		$sql .= ' zone_code = calculated_zone_code,';
+		$sql .= ' fk_zone = calculated_fk_zone,';
+		$sql .= ' manual_override = 0,';
+		$sql .= ' override_reason = null,';
+		$sql .= ' date_override = null,';
+		$sql .= ' fk_user_override = null';
+		$sql .= ' WHERE rowid = '.((int) $current['id']);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+
+		$this->logEvent('LMDBZONING_OBJECT_CLEAR_OVERRIDE', $elementType, (int) $fkElement, '', array('user_id' => (int) $userId));
+		return 1;
+	}
+
+	/**
+	 * Recalculate pending or failed object zones.
+	 *
+	 * @param int $maxItems Max items
+	 * @param int $retryFailed Retry failed rows
+	 * @param int $entity Entity id
+	 * @return array<string,int>
+	 */
+	public function recalculatePending($maxItems = 50, $retryFailed = 0, $entity = 0)
+	{
+		global $conf;
+
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+		$stats = array('processed' => 0, 'ok' => 0, 'failed' => 0);
+		$sql = 'SELECT oz.rowid, oz.element_type, oz.fk_element, p.ref as profile_ref';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as oz';
+		$sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'lmdbzoning_profile as p ON p.rowid = oz.fk_profile';
+		$sql .= ' WHERE oz.entity = '.((int) $entity);
+		$sql .= " AND (oz.calculation_status = 'pending'";
+		if (!empty($retryFailed)) {
+			$sql .= " OR oz.calculation_status = 'failed'";
+		}
+		$sql .= ')';
+		$sql .= ' ORDER BY oz.date_calculation ASC, oz.rowid ASC';
+		$sql .= $this->db->plimit((int) $maxItems);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			$stats['failed']++;
+			return $stats;
+		}
+		while ($obj = $this->db->fetch_object($resql)) {
+			$stats['processed']++;
+			$result = $this->calculateZoneForObject($obj->element_type, (int) $obj->fk_element, $obj->profile_ref, $entity);
+			if (!empty($result['status']) && $result['status'] === 'ok') {
+				$stats['ok']++;
+			} else {
+				$stats['failed']++;
+			}
+		}
+
+		return $stats;
+	}
+
+	/**
+	 * Cron wrapper for Dolibarr scheduler.
+	 *
+	 * @param User|null $user User
+	 * @return int
+	 */
+	public function cronRecalculatePending($user = null)
+	{
+		global $conf;
+
+		if (empty($conf->global->LMDBZONING_CRON_ENABLED)) {
+			return 0;
+		}
+		$maxItems = empty($conf->global->LMDBZONING_CRON_MAX_ITEMS) ? 50 : (int) $conf->global->LMDBZONING_CRON_MAX_ITEMS;
+		$retryFailed = empty($conf->global->LMDBZONING_CRON_RETRY_FAILED) ? 0 : 1;
+		$stats = $this->recalculatePending($maxItems, $retryFailed, (int) $conf->entity);
+		dol_syslog(__METHOD__.' processed='.$stats['processed'].' ok='.$stats['ok'].' failed='.$stats['failed'], LOG_INFO);
+
+		return $stats['failed'] > 0 ? -1 : 0;
+	}
+
+	/**
+	 * Calculate air distance in kilometers using Haversine formula.
+	 *
+	 * @param float $lat1 Latitude 1
+	 * @param float $lon1 Longitude 1
+	 * @param float $lat2 Latitude 2
+	 * @param float $lon2 Longitude 2
+	 * @return float
+	 */
+	public function getAirDistanceKm($lat1, $lon1, $lat2, $lon2)
+	{
+		$earthRadius = 6371;
+		$dLat = deg2rad($lat2 - $lat1);
+		$dLon = deg2rad($lon2 - $lon1);
+		$a = sin($dLat / 2) * sin($dLat / 2)
+			+ cos(deg2rad($lat1)) * cos(deg2rad($lat2))
+			* sin($dLon / 2) * sin($dLon / 2);
+		$c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+
+		return $earthRadius * $c;
+	}
+
+	/**
+	 * Fetch profile by reference.
+	 *
+	 * @param string $profileRef Profile ref
+	 * @param int    $entity     Entity id
+	 * @return LmdbZoningProfile|false
+	 */
+	private function fetchProfileByRef($profileRef, $entity)
+	{
+		$profile = new LmdbZoningProfile($this->db);
+		$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'lmdbzoning_profile';
+		$sql .= ' WHERE entity IN ('.$this->getEntityFilter('lmdbzoning_profile', $entity).')';
+		$sql .= " AND ref = '".$this->db->escape($profileRef)."'";
+		$sql .= ' AND active = 1';
+		$sql .= ' ORDER BY entity DESC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return false;
+		}
+		$obj = $this->db->fetch_object($resql);
+		if (!$obj || $profile->fetch((int) $obj->rowid) <= 0) {
+			return false;
+		}
+
+		return $profile;
+	}
+
+	/**
+	 * Find zone matching distance.
+	 *
+	 * @param int   $profileId Profile id
+	 * @param float $distance  Distance in km
+	 * @param int   $entity    Entity id
+	 * @return LmdbZoningProfileZone|false
+	 */
+	private function findZoneForDistance($profileId, $distance, $entity)
+	{
+		$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'lmdbzoning_profile_zone';
+		$sql .= ' WHERE entity IN ('.$this->getEntityFilter('lmdbzoning_zone', $entity).')';
+		$sql .= ' AND fk_profile = '.((int) $profileId);
+		$sql .= ' AND active = 1';
+		$sql .= ' AND ((distance_min = 0 AND '.((float) $distance).' >= distance_min) OR '.((float) $distance).' > distance_min)';
+		$sql .= ' AND (distance_max IS NULL OR '.((float) $distance).' <= distance_max)';
+		$sql .= ' ORDER BY priority ASC, rowid ASC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return false;
+		}
+		$obj = $this->db->fetch_object($resql);
+		if (!$obj) {
+			return false;
+		}
+		$zone = new LmdbZoningProfileZone($this->db);
+		if ($zone->fetch((int) $obj->rowid) <= 0) {
+			return false;
+		}
+
+		return $zone;
+	}
+
+	/**
+	 * Fetch zone by code.
+	 *
+	 * @param int    $profileId Profile id
+	 * @param string $zoneCode  Zone code
+	 * @param int    $entity    Entity id
+	 * @return LmdbZoningProfileZone|false
+	 */
+	private function fetchZoneByCode($profileId, $zoneCode, $entity)
+	{
+		$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'lmdbzoning_profile_zone';
+		$sql .= ' WHERE entity IN ('.$this->getEntityFilter('lmdbzoning_zone', $entity).')';
+		$sql .= ' AND fk_profile = '.((int) $profileId);
+		$sql .= " AND zone_code = '".$this->db->escape($zoneCode)."'";
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return false;
+		}
+		$obj = $this->db->fetch_object($resql);
+		if (!$obj) {
+			return false;
+		}
+		$zone = new LmdbZoningProfileZone($this->db);
+		if ($zone->fetch((int) $obj->rowid) <= 0) {
+			return false;
+		}
+
+		return $zone;
+	}
+
+	/**
+	 * Store or update object zone result.
+	 *
+	 * @param string              $elementType Object element type
+	 * @param int                 $fkElement   Object id
+	 * @param array<string,mixed> $result      Result
+	 * @param int                 $entity      Entity id
+	 * @return int
+	 */
+	private function storeObjectZoneResult($elementType, $fkElement, array $result, $entity)
+	{
+		global $user;
+
+		if (empty($result['fk_profile'])) {
+			$profileRef = isset($result['profile_ref']) ? $result['profile_ref'] : '';
+			$profile = $profileRef ? $this->fetchProfileByRef($profileRef, $entity) : false;
+			if ($profile) {
+				$result['fk_profile'] = (int) $profile->id;
+				$result['fk_referencepoint'] = (int) $profile->fk_referencepoint;
+			} else {
+				return -1;
+			}
+		}
+		$current = $this->getObjectZone($elementType, $fkElement, null, $entity);
+		$manual = is_array($current) && !empty($current['manual_override']);
+		$appliedZoneCode = $manual && !empty($current['zone_code']) ? $current['zone_code'] : (isset($result['zone_code']) ? $result['zone_code'] : '');
+		$appliedFkZone = $manual && !empty($current['fk_zone']) ? (int) $current['fk_zone'] : (isset($result['fk_zone']) ? (int) $result['fk_zone'] : 'null');
+		$appliedCategory = $manual && !empty($current['fk_categorie']) ? (int) $current['fk_categorie'] : (isset($result['fk_categorie']) && $result['fk_categorie'] ? (int) $result['fk_categorie'] : 'null');
+
+		if (is_array($current) && !empty($current['id'])) {
+			$sql = 'UPDATE '.MAIN_DB_PREFIX.'lmdbzoning_object_zone SET';
+			$sql .= ' fk_referencepoint = '.((int) $result['fk_referencepoint']).',';
+			$sql .= " address_hash = '".$this->db->escape(isset($result['address_hash']) ? $result['address_hash'] : '')."',";
+			$sql .= " address_raw = '".$this->db->escape(isset($result['address_raw']) ? $result['address_raw'] : '')."',";
+			$sql .= ' latitude = '.(isset($result['latitude']) && $result['latitude'] !== null ? ((float) $result['latitude']) : 'null').',';
+			$sql .= ' longitude = '.(isset($result['longitude']) && $result['longitude'] !== null ? ((float) $result['longitude']) : 'null').',';
+			$sql .= ' distance_km = '.(isset($result['distance_km']) && $result['distance_km'] !== null ? ((float) $result['distance_km']) : 'null').',';
+			$sql .= " calculated_zone_code = '".$this->db->escape(isset($result['zone_code']) ? $result['zone_code'] : '')."',";
+			$sql .= ' calculated_fk_zone = '.(isset($result['fk_zone']) && $result['fk_zone'] ? ((int) $result['fk_zone']) : 'null').',';
+			$sql .= " zone_code = '".$this->db->escape($appliedZoneCode)."',";
+			$sql .= ' fk_zone = '.($appliedFkZone === 'null' ? 'null' : ((int) $appliedFkZone)).',';
+			$sql .= ' fk_categorie = '.($appliedCategory === 'null' ? 'null' : ((int) $appliedCategory)).',';
+			$sql .= " calculation_status = '".$this->db->escape(isset($result['status']) ? $result['status'] : 'failed')."',";
+			$sql .= " calculation_message = '".$this->db->escape(isset($result['message']) ? $result['message'] : '')."',";
+			$sql .= " date_calculation = '".$this->db->idate(dol_now())."',";
+			$sql .= ' fk_user_calculation = '.(!empty($user->id) ? ((int) $user->id) : 'null').',';
+			$sql .= ' fk_user_modif = '.(!empty($user->id) ? ((int) $user->id) : 'null');
+			$sql .= ' WHERE rowid = '.((int) $current['id']);
+		} else {
+			$sql = 'INSERT INTO '.MAIN_DB_PREFIX.'lmdbzoning_object_zone(';
+			$sql .= 'entity, fk_profile, fk_referencepoint, element_type, fk_element, address_hash, address_raw, latitude, longitude, distance_km, calculated_zone_code, calculated_fk_zone, zone_code, fk_zone, fk_categorie, calculation_status, calculation_message, manual_override, date_calculation, fk_user_calculation, datec, fk_user_creat';
+			$sql .= ') VALUES (';
+			$sql .= ((int) $entity).', ';
+			$sql .= ((int) $result['fk_profile']).', ';
+			$sql .= ((int) $result['fk_referencepoint']).', ';
+			$sql .= "'".$this->db->escape($elementType)."', ";
+			$sql .= ((int) $fkElement).', ';
+			$sql .= "'".$this->db->escape(isset($result['address_hash']) ? $result['address_hash'] : '')."', ";
+			$sql .= "'".$this->db->escape(isset($result['address_raw']) ? $result['address_raw'] : '')."', ";
+			$sql .= (isset($result['latitude']) && $result['latitude'] !== null ? ((float) $result['latitude']) : 'null').', ';
+			$sql .= (isset($result['longitude']) && $result['longitude'] !== null ? ((float) $result['longitude']) : 'null').', ';
+			$sql .= (isset($result['distance_km']) && $result['distance_km'] !== null ? ((float) $result['distance_km']) : 'null').', ';
+			$sql .= "'".$this->db->escape(isset($result['zone_code']) ? $result['zone_code'] : '')."', ";
+			$sql .= (isset($result['fk_zone']) && $result['fk_zone'] ? ((int) $result['fk_zone']) : 'null').', ';
+			$sql .= "'".$this->db->escape($appliedZoneCode)."', ";
+			$sql .= ($appliedFkZone === 'null' ? 'null' : ((int) $appliedFkZone)).', ';
+			$sql .= ($appliedCategory === 'null' ? 'null' : ((int) $appliedCategory)).', ';
+			$sql .= "'".$this->db->escape(isset($result['status']) ? $result['status'] : 'failed')."', ";
+			$sql .= "'".$this->db->escape(isset($result['message']) ? $result['message'] : '')."', ";
+			$sql .= '0, ';
+			$sql .= "'".$this->db->idate(dol_now())."', ";
+			$sql .= (!empty($user->id) ? ((int) $user->id) : 'null').', ';
+			$sql .= "'".$this->db->idate(dol_now())."', ";
+			$sql .= (!empty($user->id) ? ((int) $user->id) : 'null');
+			$sql .= ')';
+		}
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Fetch object address from supported Dolibarr objects.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $fkElement   Object id
+	 * @return array<string,mixed>|false
+	 */
+	private function fetchObjectAddress($elementType, $fkElement)
+	{
+		$object = $this->fetchSupportedObject($elementType, $fkElement);
+		if (!$object) {
+			return false;
+		}
+		$address = $this->extractAddressFromObject($object);
+		if ($address && trim($this->addressToString($address)) !== '') {
+			return $address;
+		}
+		if (!empty($object->fk_soc)) {
+			require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+			$soc = new Societe($this->db);
+			if ($soc->fetch((int) $object->fk_soc) > 0) {
+				return $this->extractAddressFromObject($soc);
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Fetch supported object without forcing optional module presence.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $fkElement   Object id
+	 * @return CommonObject|false
+	 */
+	private function fetchSupportedObject($elementType, $fkElement)
+	{
+		$map = array(
+			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal'),
+			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande'),
+			'order' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande'),
+			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat'),
+			'contrat' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat'),
+			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project'),
+			'projet' => array('file' => '/projet/class/project.class.php', 'class' => 'Project'),
+			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter'),
+			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek'),
+			'powerplantpv' => array('file' => '/powerplantpv/class/powerplantpv.class.php', 'class' => 'PowerplantPV'),
+		);
+		if (empty($map[$elementType])) {
+			return false;
+		}
+		dol_include_once($map[$elementType]['file']);
+		if (!class_exists($map[$elementType]['class'])) {
+			return false;
+		}
+		$class = $map[$elementType]['class'];
+		$object = new $class($this->db);
+		if (!method_exists($object, 'fetch') || $object->fetch((int) $fkElement) <= 0) {
+			return false;
+		}
+
+		return $object;
+	}
+
+	/**
+	 * Extract address-like fields from an object.
+	 *
+	 * @param object $object Object
+	 * @return array<string,mixed>
+	 */
+	private function extractAddressFromObject($object)
+	{
+		$address = array(
+			'address' => $this->firstProperty($object, array('installation_address', 'address_installation', 'address', 'adresse')),
+			'zip' => $this->firstProperty($object, array('installation_zip', 'zip_installation', 'zip', 'zipcode')),
+			'town' => $this->firstProperty($object, array('installation_town', 'town_installation', 'town', 'city')),
+			'country_code' => $this->firstProperty($object, array('installation_country_code', 'country_code', 'country')),
+			'latitude' => $this->firstProperty($object, array('installation_latitude', 'latitude', 'lat')),
+			'longitude' => $this->firstProperty($object, array('installation_longitude', 'longitude', 'lon', 'lng')),
+		);
+
+		return $address;
+	}
+
+	/**
+	 * Return first existing property value.
+	 *
+	 * @param object            $object Object
+	 * @param array<int,string> $names  Names
+	 * @return mixed
+	 */
+	private function firstProperty($object, array $names)
+	{
+		foreach ($names as $name) {
+			if (isset($object->$name) && $object->$name !== '') {
+				return $object->$name;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Convert address to string.
+	 *
+	 * @param array<string,mixed> $address Address
+	 * @return string
+	 */
+	private function addressToString(array $address)
+	{
+		return trim(implode(', ', array_filter(array(
+			isset($address['address']) ? $address['address'] : '',
+			isset($address['zip']) ? $address['zip'] : '',
+			isset($address['town']) ? $address['town'] : '',
+			isset($address['country_code']) ? $address['country_code'] : '',
+		))));
+	}
+
+	/**
+	 * Return category field for an element type.
+	 *
+	 * @param LmdbZoningProfileZone $zone        Zone
+	 * @param string            $elementType Element type
+	 * @return int
+	 */
+	private function getCategoryForElementType($zone, $elementType)
+	{
+		$field = 'fk_categorie_default';
+		if ($elementType === 'powerplantpv') {
+			$field = 'fk_categorie_powerplantpv';
+		} elseif ($elementType === 'propal') {
+			$field = 'fk_categorie_propal';
+		} elseif ($elementType === 'commande' || $elementType === 'order') {
+			$field = 'fk_categorie_commande';
+		} elseif ($elementType === 'contract' || $elementType === 'contrat') {
+			$field = 'fk_categorie_contract';
+		} elseif ($elementType === 'project' || $elementType === 'projet') {
+			$field = 'fk_categorie_project';
+		} elseif ($elementType === 'fichinter') {
+			$field = 'fk_categorie_fichinter';
+		} elseif ($elementType === 'timesheetweek') {
+			$field = 'fk_categorie_timesheetweek';
+		}
+
+		return !empty($zone->$field) ? (int) $zone->$field : (!empty($zone->fk_categorie_default) ? (int) $zone->fk_categorie_default : 0);
+	}
+
+	/**
+	 * Return Dolibarr category type string.
+	 *
+	 * @param string $elementType Element type
+	 * @return string
+	 */
+	private function getCategoryTypeForElement($elementType)
+	{
+		$map = array(
+			'project' => 'project',
+			'projet' => 'project',
+			'propal' => 'propal',
+			'commande' => 'commande',
+			'order' => 'commande',
+			'contract' => 'contract',
+			'contrat' => 'contract',
+			'fichinter' => 'fichinter',
+			'powerplantpv' => 'powerplantpv',
+			'timesheetweek' => 'timesheetweek',
+		);
+
+		return isset($map[$elementType]) ? $map[$elementType] : '';
+	}
+
+	/**
+	 * Remove known zone categories for this profile from target before adding new one.
+	 *
+	 * @param object              $object     Target object
+	 * @param string              $type       Category type
+	 * @param array<string,mixed> $zoneResult Zone result
+	 * @return void
+	 */
+	private function removeKnownZoneCategories($object, $type, array $zoneResult)
+	{
+		if (empty($zoneResult['fk_profile']) || !class_exists('Categorie')) {
+			return;
+		}
+		$sql = 'SELECT fk_categorie_default, fk_categorie_powerplantpv, fk_categorie_propal, fk_categorie_commande, fk_categorie_contract, fk_categorie_project, fk_categorie_fichinter, fk_categorie_timesheetweek';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'lmdbzoning_profile_zone';
+		$sql .= ' WHERE fk_profile = '.((int) $zoneResult['fk_profile']);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return;
+		}
+		while ($row = $this->db->fetch_object($resql)) {
+			foreach ($row as $fkcat) {
+				if (empty($fkcat) || (int) $fkcat === (int) $zoneResult['fk_categorie']) {
+					continue;
+				}
+				$category = new Categorie($this->db);
+				if ($category->fetch((int) $fkcat) > 0 && method_exists($category, 'del_type')) {
+					$category->del_type($object, $type);
+				}
+			}
+		}
+	}
+
+	/**
+	 * Log event.
+	 *
+	 * @param string              $eventCode   Event code
+	 * @param string              $elementType Element type
+	 * @param int                 $fkElement   Element id
+	 * @param string              $message     Message
+	 * @param array<string,mixed> $context     Context
+	 * @return int
+	 */
+	private function logEvent($eventCode, $elementType, $fkElement, $message, array $context)
+	{
+		global $conf, $user;
+
+		$sql = 'INSERT INTO '.MAIN_DB_PREFIX.'lmdbzoning_calculation_log(';
+		$sql .= 'entity, event_code, element_type, fk_element, message, context_data, datec, fk_user_creat';
+		$sql .= ') VALUES (';
+		$sql .= ((int) $conf->entity).', ';
+		$sql .= "'".$this->db->escape($eventCode)."', ";
+		$sql .= "'".$this->db->escape($elementType)."', ";
+		$sql .= ((int) $fkElement).', ';
+		$sql .= "'".$this->db->escape($message)."', ";
+		$sql .= "'".$this->db->escape(json_encode($context))."', ";
+		$sql .= "'".$this->db->idate(dol_now())."', ";
+		$sql .= (!empty($user->id) ? ((int) $user->id) : 'null');
+		$sql .= ')';
+		$this->db->query($sql);
+
+		return 1;
+	}
+
+	/**
+	 * Return entity filter string.
+	 *
+	 * @param string $element Element name
+	 * @param int    $entity  Entity id
+	 * @return string
+	 */
+	private function getEntityFilter($element, $entity)
+	{
+		if (function_exists('getEntity')) {
+			return getEntity($element);
+		}
+
+		return (string) ((int) $entity);
+	}
+
+	/**
+	 * Convert object row to array.
+	 *
+	 * @param object $obj Row object
+	 * @return array<string,mixed>
+	 */
+	private function objectToArray($obj)
+	{
+		$array = array();
+		foreach ($obj as $key => $value) {
+			$array[$key === 'rowid' ? 'id' : $key] = $value;
+		}
+
+		return $array;
+	}
+
+	/**
+	 * Build failed result.
+	 *
+	 * @param string $message Message
+	 * @return array<string,mixed>
+	 */
+	private function failedResult($message)
+	{
+		return array(
+			'status' => 'failed',
+			'zone_code' => '',
+			'zone_label' => '',
+			'distance_km' => null,
+			'fk_zone' => null,
+			'fk_categorie' => null,
+			'latitude' => null,
+			'longitude' => null,
+			'message' => $message,
+		);
+	}
+}
