@@ -118,26 +118,13 @@ class modLmdbZoning extends DolibarrModules
 		$r++;
 
 		$r = 0;
-		$this->menu[$r++] = array(
-			'fk_menu' => '',
-			'type' => 'top',
-			'titre' => 'LmdbZoning',
-			'mainmenu' => 'lmdbzoning',
-			'leftmenu' => '',
-			'url' => '/lmdbzoning/referencepoint_list.php',
-			'langs' => 'lmdbzoning@lmdbzoning',
-			'position' => 1000,
-			'enabled' => '$conf->lmdbzoning->enabled',
-			'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")',
-			'target' => '',
-			'user' => 2,
-		);
-		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=lmdbzoning', 'type' => 'left', 'titre' => 'ReferencePoints', 'mainmenu' => 'lmdbzoning', 'leftmenu' => 'referencepoints', 'url' => '/lmdbzoning/referencepoint_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1010, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
-		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=lmdbzoning', 'type' => 'left', 'titre' => 'ZoningProfiles', 'mainmenu' => 'lmdbzoning', 'leftmenu' => 'profiles', 'url' => '/lmdbzoning/profile_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1020, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
-		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=lmdbzoning', 'type' => 'left', 'titre' => 'ObjectZoneResults', 'mainmenu' => 'lmdbzoning', 'leftmenu' => 'objectzones', 'url' => '/lmdbzoning/objectzone_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1030, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
-		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=lmdbzoning', 'type' => 'left', 'titre' => 'GeocodeCache', 'mainmenu' => 'lmdbzoning', 'leftmenu' => 'cache', 'url' => '/lmdbzoning/geocode_cache_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1040, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
-		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=lmdbzoning', 'type' => 'left', 'titre' => 'CalculationLog', 'mainmenu' => 'lmdbzoning', 'leftmenu' => 'logs', 'url' => '/lmdbzoning/calculation_log_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1050, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
-		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=lmdbzoning', 'type' => 'left', 'titre' => 'Settings', 'mainmenu' => 'lmdbzoning', 'leftmenu' => 'settings', 'url' => '/lmdbzoning/admin/setup.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1060, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "admin")', 'target' => '', 'user' => 2);
+		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=tools', 'type' => 'left', 'titre' => 'Zoning', 'mainmenu' => 'tools', 'leftmenu' => 'lmdbzoning', 'url' => '/lmdbzoning/referencepoint_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1000, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
+		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=tools,fk_leftmenu=lmdbzoning', 'type' => 'left', 'titre' => 'ReferencePoints', 'mainmenu' => 'tools', 'leftmenu' => 'referencepoints', 'url' => '/lmdbzoning/referencepoint_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1010, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
+		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=tools,fk_leftmenu=lmdbzoning', 'type' => 'left', 'titre' => 'ZoningProfiles', 'mainmenu' => 'tools', 'leftmenu' => 'profiles', 'url' => '/lmdbzoning/profile_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1020, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
+		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=tools,fk_leftmenu=lmdbzoning', 'type' => 'left', 'titre' => 'ObjectZoneResults', 'mainmenu' => 'tools', 'leftmenu' => 'objectzones', 'url' => '/lmdbzoning/objectzone_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1030, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
+		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=tools,fk_leftmenu=lmdbzoning', 'type' => 'left', 'titre' => 'GeocodeCache', 'mainmenu' => 'tools', 'leftmenu' => 'cache', 'url' => '/lmdbzoning/geocode_cache_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1040, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
+		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=tools,fk_leftmenu=lmdbzoning', 'type' => 'left', 'titre' => 'CalculationLog', 'mainmenu' => 'tools', 'leftmenu' => 'logs', 'url' => '/lmdbzoning/calculation_log_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1050, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
+		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=tools,fk_leftmenu=lmdbzoning', 'type' => 'left', 'titre' => 'Settings', 'mainmenu' => 'tools', 'leftmenu' => 'settings', 'url' => '/lmdbzoning/admin/setup.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1060, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "admin")', 'target' => '', 'user' => 2);
 
 		$this->cronjobs = array(
 			0 => array(

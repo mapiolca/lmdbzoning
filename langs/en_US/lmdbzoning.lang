@@ -1,6 +1,7 @@
 LmdbZoning=lmdbzoning
 LmdbZoningDesc=Geographical zone calculation for Dolibarr objects
 LmdbZoningDescLong=External module for geographical zone calculation, caching and category application with Multicompany support.
+Zoning=Zoning
 ReferencePoints=Reference points
 ReferencePoint=Reference point
 NewReferencePoint=New reference point
