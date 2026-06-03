@@ -21,9 +21,12 @@ class LmdbZoningProfileZone extends LmdbZoningCommonObject
 	public $distance_max;
 	public $priority = 0;
 	public $fk_categorie_default;
+	public $fk_categorie_societe;
+	public $fk_categorie_contact;
 	public $fk_categorie_powerplantpv;
 	public $fk_categorie_propal;
 	public $fk_categorie_commande;
+	public $fk_categorie_facture;
 	public $fk_categorie_contract;
 	public $fk_categorie_project;
 	public $fk_categorie_fichinter;
@@ -45,14 +48,17 @@ class LmdbZoningProfileZone extends LmdbZoningCommonObject
 		'distance_max' => array('type' => 'double', 'label' => 'DistanceMax', 'enabled' => 1, 'visible' => 1, 'position' => 50),
 		'priority' => array('type' => 'integer', 'label' => 'Priority', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => '0', 'index' => 1, 'position' => 60),
 		'fk_categorie_default' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'DefaultCategory', 'enabled' => 1, 'visible' => 1, 'position' => 70),
-		'fk_categorie_powerplantpv' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'PowerplantPVCategory', 'enabled' => 1, 'visible' => 1, 'position' => 80),
-		'fk_categorie_propal' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'PropalCategory', 'enabled' => 1, 'visible' => 1, 'position' => 90),
-		'fk_categorie_commande' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'OrderCategory', 'enabled' => 1, 'visible' => 1, 'position' => 100),
-		'fk_categorie_contract' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'ContractCategory', 'enabled' => 1, 'visible' => 1, 'position' => 110),
-		'fk_categorie_project' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'ProjectCategory', 'enabled' => 1, 'visible' => 1, 'position' => 120),
-		'fk_categorie_fichinter' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'InterventionCategory', 'enabled' => 1, 'visible' => 1, 'position' => 130),
-		'fk_categorie_timesheetweek' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'TimesheetWeekCategory', 'enabled' => 1, 'visible' => 1, 'position' => 140),
-		'active' => array('type' => 'boolean', 'label' => 'Active', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => '1', 'index' => 1, 'position' => 150),
+		'fk_categorie_societe' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'ThirdpartyCategory', 'enabled' => 1, 'visible' => 1, 'position' => 80),
+		'fk_categorie_contact' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'ContactCategory', 'enabled' => 1, 'visible' => 1, 'position' => 90),
+		'fk_categorie_powerplantpv' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'PowerplantPVCategory', 'enabled' => 1, 'visible' => 1, 'position' => 100),
+		'fk_categorie_propal' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'PropalCategory', 'enabled' => 1, 'visible' => 1, 'position' => 110),
+		'fk_categorie_commande' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'OrderCategory', 'enabled' => 1, 'visible' => 1, 'position' => 120),
+		'fk_categorie_facture' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'InvoiceCategory', 'enabled' => 1, 'visible' => 1, 'position' => 130),
+		'fk_categorie_contract' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'ContractCategory', 'enabled' => 1, 'visible' => 1, 'position' => 140),
+		'fk_categorie_project' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'ProjectCategory', 'enabled' => 1, 'visible' => 1, 'position' => 150),
+		'fk_categorie_fichinter' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'InterventionCategory', 'enabled' => 1, 'visible' => 1, 'position' => 160),
+		'fk_categorie_timesheetweek' => array('type' => 'integer:Categorie:categories/class/categorie.class.php', 'label' => 'TimesheetWeekCategory', 'enabled' => 1, 'visible' => 1, 'position' => 170),
+		'active' => array('type' => 'boolean', 'label' => 'Active', 'enabled' => 1, 'visible' => 1, 'notnull' => 1, 'default' => '1', 'index' => 1, 'position' => 180),
 		'datec' => array('type' => 'datetime', 'label' => 'DateCreation', 'enabled' => 1, 'visible' => -2, 'position' => 500),
 		'tms' => array('type' => 'timestamp', 'label' => 'DateModification', 'enabled' => 1, 'visible' => -2, 'notnull' => 1, 'position' => 501),
 		'fk_user_creat' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'UserAuthor', 'enabled' => 1, 'visible' => -2, 'position' => 510),

@@ -46,12 +46,12 @@ class LmdbZoningService
 	public static function getZonableObjectDefinitions($onlyAvailable = 0)
 	{
 		$definitions = array(
-			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_field' => 'fk_categorie_default', 'address_strategy' => 'self'),
-			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_id' => 4, 'category_field' => 'fk_categorie_default', 'address_strategy' => 'self_then_thirdparty'),
+			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_field' => 'fk_categorie_societe', 'address_strategy' => 'self'),
+			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_id' => 4, 'category_field' => 'fk_categorie_contact', 'address_strategy' => 'self_then_thirdparty'),
 			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal', 'module' => 'propal', 'table_element' => 'propal', 'category_type_id' => 23, 'category_field' => 'fk_categorie_propal', 'address_strategy' => 'thirdparty'),
 			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande', 'module' => 'commande', 'table_element' => 'commande', 'category_type_id' => 16, 'category_field' => 'fk_categorie_commande', 'address_strategy' => 'thirdparty'),
 			'order' => array('alias' => 'commande'),
-			'facture' => array('file' => '/compta/facture/class/facture.class.php', 'class' => 'Facture', 'module' => 'facture', 'table_element' => 'facture', 'category_type_id' => 17, 'category_field' => 'fk_categorie_default', 'address_strategy' => 'thirdparty'),
+			'facture' => array('file' => '/compta/facture/class/facture.class.php', 'class' => 'Facture', 'module' => 'facture', 'table_element' => 'facture', 'category_type_id' => 17, 'category_field' => 'fk_categorie_facture', 'address_strategy' => 'thirdparty'),
 			'invoice' => array('alias' => 'facture'),
 			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat', 'module' => 'contrat', 'table_element' => 'contrat', 'category_type_id' => null, 'category_field' => 'fk_categorie_contract', 'address_strategy' => 'thirdparty'),
 			'contrat' => array('alias' => 'contract'),
@@ -119,6 +119,32 @@ class LmdbZoningService
 		}
 
 		return array_values(array_unique($types));
+	}
+
+	/**
+	 * Render the linked object name/reference.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $fkElement   Object id
+	 * @return string
+	 */
+	public function renderLinkedObjectNomUrl($elementType, $fkElement)
+	{
+		$object = $this->fetchSupportedObject($elementType, (int) $fkElement);
+		if (!is_object($object)) {
+			return (int) $fkElement > 0 ? '#'.((int) $fkElement) : '';
+		}
+		if (method_exists($object, 'getNomUrl')) {
+			return $object->getNomUrl(1);
+		}
+
+		foreach (array('ref', 'name', 'nom', 'label') as $property) {
+			if (!empty($object->$property)) {
+				return dol_escape_htmltag($object->$property);
+			}
+		}
+
+		return '#'.((int) $fkElement);
 	}
 
 	/**
@@ -1205,7 +1231,7 @@ class LmdbZoningService
 		if (empty($zoneResult['fk_profile']) || !class_exists('Categorie')) {
 			return;
 		}
-		$sql = 'SELECT fk_categorie_default, fk_categorie_powerplantpv, fk_categorie_propal, fk_categorie_commande, fk_categorie_contract, fk_categorie_project, fk_categorie_fichinter, fk_categorie_timesheetweek';
+		$sql = 'SELECT fk_categorie_default, fk_categorie_societe, fk_categorie_contact, fk_categorie_powerplantpv, fk_categorie_propal, fk_categorie_commande, fk_categorie_facture, fk_categorie_contract, fk_categorie_project, fk_categorie_fichinter, fk_categorie_timesheetweek';
 		$sql .= ' FROM '.MAIN_DB_PREFIX.'lmdbzoning_profile_zone';
 		$sql .= ' WHERE fk_profile = '.((int) $zoneResult['fk_profile']);
 		$resql = $this->db->query($sql);

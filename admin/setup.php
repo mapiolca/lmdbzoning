@@ -9,6 +9,7 @@ dol_include_once('/lmdbzoning/lib/lmdbzoning_page.lib.php');
 dol_include_once('/lmdbzoning/class/referencepoint.class.php');
 dol_include_once('/lmdbzoning/class/lmdbzoningprofile.class.php');
 dol_include_once('/lmdbzoning/class/lmdbzoningprofilezone.class.php');
+dol_include_once('/lmdbzoning/class/lmdbzoningservice.class.php');
 
 $langs->loadLangs(array('admin', 'lmdbzoning@lmdbzoning'));
 
@@ -209,7 +210,7 @@ function lmdbzoning_create_initial_profile($createCategories = 0)
 		$zone->distance_max = $zoneData[3];
 		$zone->priority = $zoneData[4];
 		if ($createCategories) {
-			$zone->fk_categorie_project = lmdbzoning_create_project_category($zoneData[1]);
+			lmdbzoning_fill_recommended_categories($zone, $zoneData[1]);
 		}
 		$zone->active = 1;
 		if ($zone->create($user) <= 0) {
@@ -228,12 +229,40 @@ function lmdbzoning_create_initial_profile($createCategories = 0)
 }
 
 /**
- * Create a project category when native categories are available.
+ * Fill recommended category fields for all active supported object types.
+ *
+ * @param LmdbZoningProfileZone $zone  Zone object
+ * @param string                $label Category label
+ * @return void
+ */
+function lmdbzoning_fill_recommended_categories($zone, $label)
+{
+	$processed = array();
+	foreach (LmdbZoningService::getZonableObjectDefinitions(1) as $definition) {
+		if (empty($definition['category_field']) || !isset($definition['category_type_id']) || $definition['category_type_id'] === null) {
+			continue;
+		}
+		$field = $definition['category_field'];
+		if ($field === 'fk_categorie_default' || !array_key_exists($field, $zone->fields)) {
+			continue;
+		}
+		$key = $field.':'.((int) $definition['category_type_id']);
+		if (isset($processed[$key])) {
+			continue;
+		}
+		$processed[$key] = true;
+		$zone->$field = lmdbzoning_create_category($label, (int) $definition['category_type_id']);
+	}
+}
+
+/**
+ * Create a native category when available.
  *
  * @param string $label Category label
+ * @param int    $type  Numeric category type
  * @return int
  */
-function lmdbzoning_create_project_category($label)
+function lmdbzoning_create_category($label, $type)
 {
 	global $db, $conf, $user;
 
@@ -243,7 +272,6 @@ function lmdbzoning_create_project_category($label)
 	if (!class_exists('Categorie')) {
 		return 0;
 	}
-	$type = defined('Categorie::TYPE_PROJECT') ? Categorie::TYPE_PROJECT : 5;
 	$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'categorie WHERE entity = '.((int) $conf->entity)." AND type = ".((int) $type)." AND label = '".$db->escape($label)."'";
 	$resql = $db->query($sql);
 	if ($resql && ($obj = $db->fetch_object($resql))) {
