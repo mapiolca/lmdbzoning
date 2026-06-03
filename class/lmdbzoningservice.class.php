@@ -1297,16 +1297,17 @@ class LmdbZoningService
 	{
 		$profile = new LmdbZoningProfile($this->db);
 		$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'lmdbzoning_profile';
-		$sql .= ' WHERE entity = '.((int) $entity);
+		$sql .= ' WHERE entity IN ('.$this->getEntityFilter('lmdbzoning_profile', (int) $entity).')';
 		$sql .= " AND ref = '".$this->db->escape($profileRef)."'";
 		$sql .= ' AND active = 1';
+		$sql .= ' ORDER BY CASE WHEN entity = '.((int) $entity).' THEN 0 ELSE 1 END, rowid ASC';
 		$resql = $this->db->query($sql);
 		if (!$resql) {
 			$this->error = $this->db->lasterror();
 			return false;
 		}
 		$obj = $this->db->fetch_object($resql);
-		if (!$obj || $profile->fetchInEntity((int) $obj->rowid, (int) $entity) <= 0) {
+		if (!$obj || $profile->fetch((int) $obj->rowid) <= 0) {
 			return false;
 		}
 
