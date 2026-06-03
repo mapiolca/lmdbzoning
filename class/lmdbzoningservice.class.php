@@ -46,20 +46,20 @@ class LmdbZoningService
 	public static function getZonableObjectDefinitions($onlyAvailable = 0)
 	{
 		$definitions = array(
-			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_constant' => 'TYPE_CUSTOMER', 'category_type' => 'customer', 'category_field' => 'fk_categorie_default', 'address_strategy' => 'self'),
-			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_constant' => 'TYPE_CONTACT', 'category_type' => 'contact', 'category_field' => 'fk_categorie_default', 'address_strategy' => 'self_then_thirdparty'),
-			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal', 'module' => 'propal', 'table_element' => 'propal', 'category_type_constant' => 'TYPE_PROPOSAL', 'category_type' => 'propal', 'category_field' => 'fk_categorie_propal', 'address_strategy' => 'thirdparty'),
-			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande', 'module' => 'commande', 'table_element' => 'commande', 'category_type_constant' => 'TYPE_ORDER', 'category_type' => 'order', 'category_field' => 'fk_categorie_commande', 'address_strategy' => 'thirdparty'),
+			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_field' => 'fk_categorie_default', 'address_strategy' => 'self'),
+			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_id' => 4, 'category_field' => 'fk_categorie_default', 'address_strategy' => 'self_then_thirdparty'),
+			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal', 'module' => 'propal', 'table_element' => 'propal', 'category_type_id' => 23, 'category_field' => 'fk_categorie_propal', 'address_strategy' => 'thirdparty'),
+			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande', 'module' => 'commande', 'table_element' => 'commande', 'category_type_id' => 16, 'category_field' => 'fk_categorie_commande', 'address_strategy' => 'thirdparty'),
 			'order' => array('alias' => 'commande'),
-			'facture' => array('file' => '/compta/facture/class/facture.class.php', 'class' => 'Facture', 'module' => 'facture', 'table_element' => 'facture', 'category_type_constant' => 'TYPE_INVOICE', 'category_type' => 'invoice', 'category_field' => 'fk_categorie_default', 'address_strategy' => 'thirdparty'),
+			'facture' => array('file' => '/compta/facture/class/facture.class.php', 'class' => 'Facture', 'module' => 'facture', 'table_element' => 'facture', 'category_type_id' => 17, 'category_field' => 'fk_categorie_default', 'address_strategy' => 'thirdparty'),
 			'invoice' => array('alias' => 'facture'),
-			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat', 'module' => 'contrat', 'table_element' => 'contrat', 'category_type_constant' => 'TYPE_CONTRACT', 'category_type' => 'contract', 'category_field' => 'fk_categorie_contract', 'address_strategy' => 'thirdparty'),
+			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat', 'module' => 'contrat', 'table_element' => 'contrat', 'category_type_id' => null, 'category_field' => 'fk_categorie_contract', 'address_strategy' => 'thirdparty'),
 			'contrat' => array('alias' => 'contract'),
-			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project', 'module' => 'project', 'table_element' => 'projet', 'category_type_constant' => 'TYPE_PROJECT', 'category_type' => 'project', 'category_field' => 'fk_categorie_project', 'address_strategy' => 'self_then_thirdparty'),
+			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project', 'module' => 'project', 'table_element' => 'projet', 'category_type_id' => 6, 'category_field' => 'fk_categorie_project', 'address_strategy' => 'self_then_thirdparty'),
 			'projet' => array('alias' => 'project'),
-			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter', 'module' => 'ficheinter', 'table_element' => 'fichinter', 'category_type_constant' => 'TYPE_FICHINTER', 'category_type' => 'fichinter', 'category_field' => 'fk_categorie_fichinter', 'address_strategy' => 'thirdparty'),
-			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek', 'module' => 'timesheetweek', 'table_element' => 'timesheet_week', 'category_type_constant' => 'TYPE_TIMESHEETWEEK', 'category_type' => 'timesheetweek', 'category_field' => 'fk_categorie_timesheetweek', 'address_strategy' => 'thirdparty'),
-			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_constant' => 'TYPE_POWERPLANTPV', 'category_type' => 'powerplantpv', 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty'),
+			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter', 'module' => 'ficheinter', 'table_element' => 'fichinter', 'category_type_id' => 14, 'category_field' => 'fk_categorie_fichinter', 'address_strategy' => 'thirdparty'),
+			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek', 'module' => 'timesheetweek', 'table_element' => 'timesheet_week', 'category_type_id' => null, 'category_field' => 'fk_categorie_timesheetweek', 'address_strategy' => 'thirdparty'),
+			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_id' => null, 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty'),
 		);
 
 		foreach ($definitions as $elementType => $definition) {
@@ -68,8 +68,6 @@ class LmdbZoningService
 			}
 		}
 		foreach ($definitions as $elementType => $definition) {
-			$definitions[$elementType]['resolved_category_type'] = self::resolveCategoryType($definition);
-			$definitions[$elementType]['category_type_supported'] = self::isCategoryTypeSupported($definition);
 			$definitions[$elementType]['available'] = self::isZonableDefinitionAvailable($definitions[$elementType]);
 		}
 		if (empty($onlyAvailable)) {
@@ -112,67 +110,15 @@ class LmdbZoningService
 		}
 		$types = array();
 		foreach (self::getZonableObjectDefinitions(1) as $definition) {
-			if (empty($definition['resolved_category_type'])) {
+			if (!isset($definition['category_type_id']) || $definition['category_type_id'] === null) {
 				continue;
 			}
 			if ($field === 'fk_categorie_default' || (!empty($definition['category_field']) && $definition['category_field'] === $field)) {
-				$types[] = (string) $definition['resolved_category_type'];
-			}
-		}
-		if ($field === 'fk_categorie_default') {
-			$supplierType = self::resolveCategoryType(array('category_type_constant' => 'TYPE_SUPPLIER', 'category_type' => 'supplier'));
-			if ($supplierType !== '' && self::isCategoryTypeSupported(array('category_type_constant' => 'TYPE_SUPPLIER', 'category_type' => 'supplier'))) {
-				$types[] = $supplierType;
+				$types[] = (int) $definition['category_type_id'];
 			}
 		}
 
 		return array_values(array_unique($types));
-	}
-
-	/**
-	 * Resolve a Dolibarr category type from a definition.
-	 *
-	 * @param array<string,mixed> $definition Definition
-	 * @return string
-	 */
-	public static function resolveCategoryType(array $definition)
-	{
-		if (!class_exists('Categorie') && defined('DOL_DOCUMENT_ROOT') && file_exists(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php')) {
-			require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
-		}
-		if (class_exists('Categorie') && !empty($definition['category_type_constant'])) {
-			$constant = 'Categorie::'.$definition['category_type_constant'];
-			if (defined($constant)) {
-				return (string) constant($constant);
-			}
-		}
-
-		return !empty($definition['category_type']) ? (string) $definition['category_type'] : '';
-	}
-
-	/**
-	 * Check if the category type is declared by Dolibarr categories.
-	 *
-	 * @param array<string,mixed> $definition Definition
-	 * @return bool
-	 */
-	private static function isCategoryTypeSupported(array $definition)
-	{
-		if (!class_exists('Categorie') && defined('DOL_DOCUMENT_ROOT') && file_exists(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php')) {
-			require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
-		}
-		if (!class_exists('Categorie')) {
-			return false;
-		}
-		if (!empty($definition['category_type_constant']) && defined('Categorie::'.$definition['category_type_constant'])) {
-			return true;
-		}
-		$type = self::resolveCategoryType($definition);
-		if ($type !== '' && property_exists('Categorie', 'MAP_TYPE_TITLE_AREA') && is_array(Categorie::$MAP_TYPE_TITLE_AREA) && array_key_exists($type, Categorie::$MAP_TYPE_TITLE_AREA)) {
-			return true;
-		}
-
-		return false;
 	}
 
 	/**
@@ -369,7 +315,7 @@ class LmdbZoningService
 			return -1;
 		}
 		if (!empty($category->type)) {
-			$type = (string) $category->type;
+			$type = (int) $category->type;
 		}
 		if (isset($category->entity) && isset($object->entity) && (int) $category->entity !== (int) $object->entity) {
 			$this->error = 'CategoryEntityMismatch';
@@ -638,7 +584,7 @@ class LmdbZoningService
 		if (!class_exists('Categorie') && defined('DOL_DOCUMENT_ROOT') && file_exists(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php')) {
 			require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
 		}
-		if (!class_exists('Categorie') || empty($definition['resolved_category_type']) || empty($definition['category_type_supported'])) {
+		if (!class_exists('Categorie') || !isset($definition['category_type_id']) || $definition['category_type_id'] === null) {
 			return false;
 		}
 
@@ -1234,16 +1180,16 @@ class LmdbZoningService
 	}
 
 	/**
-	 * Return Dolibarr category type string.
+	 * Return Dolibarr numeric category type.
 	 *
 	 * @param string $elementType Element type
-	 * @return string
+	 * @return int|string
 	 */
 	private function getCategoryTypeForElement($elementType)
 	{
 		$definition = self::getZonableObjectDefinition($elementType);
 
-		return !empty($definition['resolved_category_type']) ? (string) $definition['resolved_category_type'] : '';
+		return isset($definition['category_type_id']) && $definition['category_type_id'] !== null ? (int) $definition['category_type_id'] : '';
 	}
 
 	/**

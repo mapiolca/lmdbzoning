@@ -544,11 +544,11 @@ function lmdbzoning_get_category_options($field)
 
 	$sql = 'SELECT t.rowid, t.label FROM '.MAIN_DB_PREFIX.'categorie as t WHERE 1 = 1';
 	if (is_array($types) && count($types) > 0) {
-		$escapedTypes = array();
+		$filteredTypes = array();
 		foreach ($types as $type) {
-			$escapedTypes[] = "'".$GLOBALS['db']->escape($type)."'";
+			$filteredTypes[] = (int) $type;
 		}
-		$sql .= ' AND t.type IN ('.implode(',', $escapedTypes).')';
+		$sql .= ' AND t.type IN ('.implode(',', array_values(array_unique($filteredTypes))).')';
 	} else {
 		$sql .= ' AND 1 = 0';
 	}
