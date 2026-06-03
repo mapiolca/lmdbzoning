@@ -160,6 +160,40 @@ class ActionsLmdbZoning
 	}
 
 	/**
+	 * Add the native category type used by contracts.
+	 *
+	 * @param array<string,mixed> $parameters Parameters
+	 * @param object             $object     Category object
+	 * @param string             $action     Action
+	 * @param HookManager        $hookmanager Hook manager
+	 * @return int
+	 */
+	public function constructCategory($parameters, &$object, &$action, $hookmanager)
+	{
+		global $langs;
+
+		if (function_exists('isModEnabled') && !isModEnabled('lmdbzoning')) {
+			return 0;
+		}
+		$langs->load('lmdbzoning@lmdbzoning');
+
+		$this->results = array(
+			array(
+				'id' => 450022,
+				'code' => 'contract',
+				'cat_fk' => 'contract',
+				'cat_table' => 'contract',
+				'obj_class' => 'Contrat',
+				'obj_table' => 'contrat',
+				'label' => 'Contract',
+			),
+		);
+		$hookmanager->resArray = $this->results;
+
+		return 0;
+	}
+
+	/**
 	 * Add a read-only lmdbzoning block on supported object cards.
 	 *
 	 * @param array<string,mixed> $parameters Parameters

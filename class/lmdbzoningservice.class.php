@@ -53,7 +53,7 @@ class LmdbZoningService
 			'order' => array('alias' => 'commande'),
 			'facture' => array('file' => '/compta/facture/class/facture.class.php', 'class' => 'Facture', 'module' => 'facture', 'table_element' => 'facture', 'category_type_id' => 17, 'category_link_type' => 'facture', 'category_field' => 'fk_categorie_facture', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
 			'invoice' => array('alias' => 'facture'),
-			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat', 'module' => 'contrat', 'table_element' => 'contrat', 'category_type_id' => null, 'category_link_type' => 'contract', 'category_field' => 'fk_categorie_contract', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat', 'module' => 'contrat', 'table_element' => 'contrat', 'category_type_id' => 450022, 'category_link_type' => 'contract', 'category_link_table' => 'categorie_contract', 'category_link_object_field' => 'fk_contract', 'category_link_category_field' => 'fk_categorie', 'category_field' => 'fk_categorie_contract', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
 			'contrat' => array('alias' => 'contract'),
 			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project', 'module' => 'project', 'table_element' => 'projet', 'category_type_id' => 6, 'category_link_type' => 'project', 'category_field' => 'fk_categorie_project', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 20),
 			'projet' => array('alias' => 'project'),

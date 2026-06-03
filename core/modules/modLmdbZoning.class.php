@@ -49,6 +49,7 @@ class modLmdbZoning extends DolibarrModules
 					'multicompanyexternalmodulesharing',
 					'multicompanyexternalmodules',
 					'multicompanysharingoptions',
+					'category',
 					'propalcard',
 					'ordercard',
 					'contractcard',
