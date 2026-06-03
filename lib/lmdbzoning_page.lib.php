@@ -95,7 +95,9 @@ function lmdbzoning_print_object_form_fields($object)
 		$label = $langs->trans(isset($definition['label']) ? $definition['label'] : $field);
 		$value = isset($object->$field) ? $object->$field : (isset($definition['default']) ? $definition['default'] : '');
 		print '<tr><td class="titlefieldcreate">'.$label.'</td><td>';
-		if (strpos($type, 'text') === 0) {
+		if (lmdbzoning_is_closed_choice_field($field)) {
+			print lmdbzoning_render_closed_choice_select($field, $value, empty($definition['notnull']));
+		} elseif (strpos($type, 'text') === 0) {
 			print '<textarea class="flat minwidth500" name="'.$field.'" rows="3">'.dol_escape_htmltag($value).'</textarea>';
 		} elseif (strpos($type, 'boolean') === 0) {
 			print $form->selectyesno($field, (string) $value, 1);
@@ -254,6 +256,108 @@ function lmdbzoning_is_resolvable_fk_field($field, array $definition)
 	}
 
 	return true;
+}
+
+/**
+ * Check if a field uses a closed list of values.
+ *
+ * @param string $field Field name
+ * @return bool
+ */
+function lmdbzoning_is_closed_choice_field($field)
+{
+	$options = lmdbzoning_get_closed_choice_options($field);
+
+	return is_array($options);
+}
+
+/**
+ * Render a closed choice select enhanced with Dolibarr ajax_combobox when available.
+ *
+ * @param string $field Field name
+ * @param mixed  $value Current value
+ * @param bool   $allowEmpty Allow empty option
+ * @return string
+ */
+function lmdbzoning_render_closed_choice_select($field, $value, $allowEmpty = true)
+{
+	global $form;
+
+	$options = lmdbzoning_get_closed_choice_options($field);
+	if (!is_array($options)) {
+		return '<input class="flat minwidth300" type="text" name="'.$field.'" value="'.dol_escape_htmltag($value).'">';
+	}
+
+	$selected = ($value === null) ? '' : (string) $value;
+	$out = $form->selectarray($field, $options, $selected, $allowEmpty ? 1 : 0, 0, 0, '', 0, 0, 0, '', 'flat minwidth300', 0);
+	if (function_exists('ajax_combobox')) {
+		$out .= ajax_combobox($field);
+	}
+
+	return $out;
+}
+
+/**
+ * Return closed choice options for a field.
+ *
+ * @param string $field Field name
+ * @return array<string,string>|null
+ */
+function lmdbzoning_get_closed_choice_options($field)
+{
+	global $langs;
+
+	$definitions = array(
+		'geocode_source' => array(
+			'manual' => 'LmdbZoningSourceManual',
+			'geoplateforme' => 'LmdbZoningSourceGeoplateforme',
+		),
+		'source' => array(
+			'manual' => 'LmdbZoningSourceManual',
+			'geoplateforme' => 'LmdbZoningSourceGeoplateforme',
+		),
+		'geocode_status' => array(
+			'ok' => 'LmdbZoningStatusOk',
+			'ambiguous' => 'LmdbZoningStatusAmbiguous',
+			'failed' => 'LmdbZoningStatusFailed',
+		),
+		'status' => array(
+			'ok' => 'LmdbZoningStatusOk',
+			'ambiguous' => 'LmdbZoningStatusAmbiguous',
+			'failed' => 'LmdbZoningStatusFailed',
+		),
+		'calculation_status' => array(
+			'pending' => 'LmdbZoningStatusPending',
+			'ok' => 'LmdbZoningStatusOk',
+			'out_of_range' => 'LmdbZoningStatusOutOfRange',
+			'failed' => 'LmdbZoningStatusFailed',
+		),
+		'distance_method' => array(
+			'air_distance' => 'LmdbZoningDistanceMethodAirDistance',
+		),
+		'unit' => array(
+			'km' => 'LmdbZoningUnitKm',
+		),
+		'event_code' => array(
+			'LMDBZONING_OBJECT_CALCULATE' => 'LmdbZoningEventObjectCalculate',
+			'LMDBZONING_CATEGORY_APPLY' => 'LmdbZoningEventCategoryApply',
+			'LMDBZONING_OBJECT_OVERRIDE' => 'LmdbZoningEventObjectOverride',
+			'LMDBZONING_OBJECT_CLEAR_OVERRIDE' => 'LmdbZoningEventObjectClearOverride',
+		),
+		'LMDBZONING_GEOCODER_PROVIDER' => array(
+			'geoplateforme' => 'LmdbZoningSourceGeoplateforme',
+		),
+	);
+	if (!isset($definitions[$field])) {
+		return null;
+	}
+
+	$options = array();
+	foreach ($definitions[$field] as $value => $translationKey) {
+		$options[$value] = $langs->trans($translationKey);
+	}
+
+	return $options;
 }
 
 /**
@@ -485,11 +589,31 @@ function lmdbzoning_render_field_output($field, array $definition, $value)
 	if ($value === null || $value === '') {
 		return '';
 	}
+	if (lmdbzoning_is_closed_choice_field($field)) {
+		return lmdbzoning_render_closed_choice_output($field, $value);
+	}
 	if (lmdbzoning_is_resolvable_fk_field($field, $definition)) {
 		$html = lmdbzoning_render_fk_output($field, $definition, (int) $value);
 		if ($html !== '') {
 			return $html;
 		}
+	}
+
+	return dol_escape_htmltag((string) $value);
+}
+
+/**
+ * Render a closed choice value.
+ *
+ * @param string $field Field name
+ * @param mixed  $value Value
+ * @return string
+ */
+function lmdbzoning_render_closed_choice_output($field, $value)
+{
+	$options = lmdbzoning_get_closed_choice_options($field);
+	if (is_array($options) && isset($options[(string) $value])) {
+		return dol_escape_htmltag($options[(string) $value]);
 	}
 
 	return dol_escape_htmltag((string) $value);

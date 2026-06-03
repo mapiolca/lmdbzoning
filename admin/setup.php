@@ -67,7 +67,7 @@ print '<input type="hidden" name="token" value="'.newToken().'">';
 print '<input type="hidden" name="action" value="save">';
 print '<table class="border centpercent">';
 lmdbzoning_print_const_yesno('LMDBZONING_GEOCODER_ENABLED', 'EnableGeocoder');
-lmdbzoning_print_const_text('LMDBZONING_GEOCODER_PROVIDER', 'GeocoderProvider', 'geoplateforme');
+lmdbzoning_print_const_closed_choice('LMDBZONING_GEOCODER_PROVIDER', 'GeocoderProvider', 'geoplateforme');
 lmdbzoning_print_const_text('LMDBZONING_GEOCODER_API_URL', 'GeocoderApiUrl', 'https://data.geopf.fr/geocodage/search');
 lmdbzoning_print_const_text('LMDBZONING_GEOCODER_TIMEOUT', 'GeocoderTimeout', '5');
 lmdbzoning_print_const_text('LMDBZONING_CACHE_DURATION_DAYS', 'CacheDurationDays', '365');
@@ -125,6 +125,21 @@ function lmdbzoning_print_const_yesno($name, $label)
 	global $conf, $langs, $form;
 	$value = !empty($conf->global->$name) ? 1 : 0;
 	print '<tr><td class="titlefield">'.$langs->trans($label).'</td><td>'.$form->selectyesno($name, $value, 1).'</td></tr>';
+}
+
+/**
+ * Print closed choice constant row.
+ *
+ * @param string $name Constant name
+ * @param string $label Translation key
+ * @param string $default Default value
+ * @return void
+ */
+function lmdbzoning_print_const_closed_choice($name, $label, $default = '')
+{
+	global $conf, $langs;
+	$value = isset($conf->global->$name) ? $conf->global->$name : $default;
+	print '<tr><td class="titlefield">'.$langs->trans($label).'</td><td>'.lmdbzoning_render_closed_choice_select($name, $value, false).'</td></tr>';
 }
 
 /**
