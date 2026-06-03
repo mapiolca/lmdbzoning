@@ -161,7 +161,12 @@ class modLmdbZoning extends DolibarrModules
 
 		$this->syncMulticompanySharing(1);
 
-		return $this->_init($sql, $options);
+		$result = $this->_init($sql, $options);
+		if ($result > 0) {
+			$this->syncEntityCronJob();
+		}
+
+		return $result;
 	}
 
 	/**
@@ -268,5 +273,146 @@ class modLmdbZoning extends DolibarrModules
 			unset($current['lmdbzoning']);
 		}
 		dolibarr_set_const($this->db, 'MULTICOMPANY_EXTERNAL_MODULES_SHARING', json_encode($current), 'chaine', 0, '', (int) $conf->entity);
+	}
+
+	/**
+	 * Ensure the module cron job exists in the current entity.
+	 *
+	 * Dolibarr normally creates cron rows from $this->cronjobs during _init(),
+	 * but this explicit sync keeps the job visible per entity on installations
+	 * where the native registration did not materialize it.
+	 *
+	 * @return void
+	 */
+	private function syncEntityCronJob()
+	{
+		global $conf;
+
+		$columns = $this->getCronJobColumns();
+		if (empty($columns['rowid'])) {
+			return;
+		}
+
+		$classField = !empty($columns['classesname']) ? 'classesname' : (!empty($columns['class']) ? 'class' : '');
+		$methodField = !empty($columns['methodename']) ? 'methodename' : (!empty($columns['method']) ? 'method' : '');
+		if ($classField === '' || $methodField === '') {
+			return;
+		}
+
+		$values = array(
+			'label' => 'LmdbZoningCronRecalculate',
+			'jobtype' => 'method',
+			$classField => '/lmdbzoning/class/lmdbzoningservice.class.php',
+			'objectname' => 'LmdbZoningService',
+			$methodField => 'cronRecalculatePending',
+			'params' => '',
+			'parameters' => '',
+			'md5params' => md5(''),
+			'module_name' => 'lmdbzoning',
+			'comment' => 'Recalculate pending lmdbzoning rows',
+			'command' => '',
+			'frequency' => 3600,
+			'unitfrequency' => 3600,
+			'status' => 0,
+			'processing' => 0,
+			'priority' => 0,
+			'test' => '$conf->lmdbzoning->enabled && !empty($conf->global->LMDBZONING_CRON_ENABLED)',
+		);
+		if (!empty($columns['entity'])) {
+			$values['entity'] = (int) $conf->entity;
+		}
+
+		$where = array();
+		if (!empty($columns['entity'])) {
+			$where[] = 'entity = '.((int) $conf->entity);
+		}
+		$where[] = $classField." = '".$this->db->escape($values[$classField])."'";
+		if (!empty($columns['objectname'])) {
+			$where[] = "objectname = '".$this->db->escape($values['objectname'])."'";
+		}
+		$where[] = $methodField." = '".$this->db->escape($values[$methodField])."'";
+
+		$rowid = 0;
+		$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'cronjob WHERE '.implode(' AND ', $where);
+		$resql = $this->db->query($sql);
+		if ($resql && ($row = $this->db->fetch_object($resql))) {
+			$rowid = (int) $row->rowid;
+		}
+
+		if ($rowid > 0) {
+			$set = array();
+			foreach ($values as $field => $value) {
+				if (empty($columns[$field]) || $field === 'entity' || $field === 'status') {
+					continue;
+				}
+				$set[] = $field.' = '.$this->formatCronJobSqlValue($value);
+			}
+			if (!empty($set)) {
+				$sql = 'UPDATE '.MAIN_DB_PREFIX.'cronjob SET '.implode(', ', $set).' WHERE rowid = '.$rowid;
+				$this->db->query($sql);
+			}
+			return;
+		}
+
+		if (!empty($columns['datec'])) {
+			$values['datec'] = array('sql' => $this->db->idate(dol_now()));
+		}
+
+		$fields = array();
+		$sqlValues = array();
+		foreach ($values as $field => $value) {
+			if (empty($columns[$field])) {
+				continue;
+			}
+			$fields[] = $field;
+			$sqlValues[] = $this->formatCronJobSqlValue($value);
+		}
+		if (empty($fields)) {
+			return;
+		}
+
+		$sql = 'INSERT INTO '.MAIN_DB_PREFIX.'cronjob ('.implode(', ', $fields).') VALUES ('.implode(', ', $sqlValues).')';
+		$this->db->query($sql);
+	}
+
+	/**
+	 * Return available columns of Dolibarr cronjob table.
+	 *
+	 * @return array<string,int>
+	 */
+	private function getCronJobColumns()
+	{
+		$columns = array();
+		$sql = 'SHOW COLUMNS FROM '.MAIN_DB_PREFIX.'cronjob';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return $columns;
+		}
+		while ($row = $this->db->fetch_object($resql)) {
+			$columns[strtolower($row->Field)] = 1;
+		}
+
+		return $columns;
+	}
+
+	/**
+	 * Format a value for a cronjob SQL assignment.
+	 *
+	 * @param mixed $value Value to format
+	 * @return string
+	 */
+	private function formatCronJobSqlValue($value)
+	{
+		if ($value === null) {
+			return 'null';
+		}
+		if (is_array($value) && isset($value['sql'])) {
+			return (string) $value['sql'];
+		}
+		if (is_int($value) || is_float($value)) {
+			return (string) $value;
+		}
+
+		return "'".$this->db->escape((string) $value)."'";
 	}
 }
