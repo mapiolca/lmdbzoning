@@ -470,7 +470,8 @@ function lmdbzoning_get_fk_options($field, array $definition, $sourceObject = nu
 	$sql = 'SELECT t.* FROM '.MAIN_DB_PREFIX.$object->table_element.' as t WHERE 1 = 1';
 	if (!empty($object->fields['entity'])) {
 		if (function_exists('getEntity')) {
-			$sql .= ' AND t.entity IN ('.$GLOBALS['db']->sanitize(getEntity($object->table_element)).')';
+			$entityElement = !empty($object->element) ? $object->element : $object->table_element;
+			$sql .= ' AND t.entity IN ('.$GLOBALS['db']->sanitize(getEntity($entityElement)).')';
 		} else {
 			$sql .= ' AND t.entity = '.((int) $GLOBALS['conf']->entity);
 		}

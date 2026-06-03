@@ -130,7 +130,9 @@ class LmdbZoningService
 	 */
 	public function renderLinkedObjectNomUrl($elementType, $fkElement)
 	{
-		$object = $this->fetchSupportedObject($elementType, (int) $fkElement);
+		global $conf;
+
+		$object = $this->fetchSupportedObject($elementType, (int) $fkElement, (int) $conf->entity);
 		if (!is_object($object)) {
 			return (int) $fkElement > 0 ? '#'.((int) $fkElement) : '';
 		}
@@ -245,13 +247,14 @@ class LmdbZoningService
 			return $result;
 		}
 		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
-		$address = $this->fetchObjectAddress($elementType, (int) $fkElement);
+		$address = $this->fetchObjectAddress($elementType, (int) $fkElement, $entity);
 		if (!$address) {
 			$result = $this->failedResult('ObjectAddressNotFound');
 			$result['element_type'] = $elementType;
 			$result['fk_element'] = (int) $fkElement;
 			$profile = $this->fetchProfileByRef($profileRef, $entity);
 			if ($profile) {
+				$result['entity'] = $entity;
 				$result['profile_ref'] = $profile->ref;
 				$result['fk_profile'] = (int) $profile->id;
 				$result['fk_referencepoint'] = (int) $profile->fk_referencepoint;
@@ -261,6 +264,7 @@ class LmdbZoningService
 		}
 		$address['element_type'] = $elementType;
 		$result = $this->calculateZoneForAddress($address, $profileRef, $entity);
+		$result['entity'] = $entity;
 		$this->storeObjectZoneResult($elementType, (int) $fkElement, $result, $entity);
 		if ($result['status'] === 'ok' && !empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY)) {
 			$this->applyZoneCategoryToObject($elementType, (int) $fkElement, $result);
@@ -328,7 +332,10 @@ class LmdbZoningService
 			return 0;
 		}
 
-		$object = $this->fetchSupportedObject($elementType, (int) $fkElement);
+		global $conf;
+
+		$entity = !empty($zoneResult['entity']) ? (int) $zoneResult['entity'] : (int) $conf->entity;
+		$object = $this->fetchSupportedObject($elementType, (int) $fkElement, $entity);
 		if (!$object) {
 			return -1;
 		}
@@ -1152,9 +1159,9 @@ class LmdbZoningService
 	 * @param int    $fkElement   Object id
 	 * @return array<string,mixed>|false
 	 */
-	private function fetchObjectAddress($elementType, $fkElement)
+	private function fetchObjectAddress($elementType, $fkElement, $entity)
 	{
-		$object = $this->fetchSupportedObject($elementType, $fkElement);
+		$object = $this->fetchSupportedObject($elementType, $fkElement, $entity);
 		if (!$object) {
 			return false;
 		}
@@ -1171,7 +1178,7 @@ class LmdbZoningService
 				if (empty($object->$property)) {
 					continue;
 				}
-				$address = $this->fetchThirdpartyAddress((int) $object->$property);
+				$address = $this->fetchThirdpartyAddress((int) $object->$property, $entity);
 				if ($this->isUsableAddress($address)) {
 					return $address;
 				}
@@ -1188,7 +1195,7 @@ class LmdbZoningService
 	 * @param int    $fkElement   Object id
 	 * @return CommonObject|false
 	 */
-	private function fetchSupportedObject($elementType, $fkElement)
+	private function fetchSupportedObject($elementType, $fkElement, $entity = 0)
 	{
 		$definition = self::getZonableObjectDefinition($elementType);
 		if (empty($definition) || empty($definition['file']) || empty($definition['class'])) {
@@ -1203,6 +1210,9 @@ class LmdbZoningService
 		if (!method_exists($object, 'fetch') || $object->fetch((int) $fkElement) <= 0) {
 			return false;
 		}
+		if (!$this->isObjectInEntityScope($object, !empty($definition['table_element']) ? (string) $definition['table_element'] : $elementType, (int) $entity)) {
+			return false;
+		}
 
 		return $object;
 	}
@@ -1213,15 +1223,40 @@ class LmdbZoningService
 	 * @param int $socid Thirdparty id
 	 * @return array<string,mixed>|false
 	 */
-	private function fetchThirdpartyAddress($socid)
+	private function fetchThirdpartyAddress($socid, $entity = 0)
 	{
 		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
 		$soc = new Societe($this->db);
-		if ($soc->fetch((int) $socid) > 0) {
+		if ($soc->fetch((int) $socid) > 0 && $this->isObjectInEntityScope($soc, 'societe', (int) $entity)) {
 			return $this->extractAddressFromObject($soc);
 		}
 
 		return false;
+	}
+
+	/**
+	 * Check object entity against the allowed Multicompany scope for an element.
+	 *
+	 * @param object $object  Dolibarr object
+	 * @param string $element Element or table element
+	 * @param int    $entity  Current entity
+	 * @return bool
+	 */
+	private function isObjectInEntityScope($object, $element, $entity = 0)
+	{
+		global $conf;
+
+		if (!isset($object->entity)) {
+			return true;
+		}
+		$objectEntity = (int) $object->entity;
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+		if (function_exists('getEntity')) {
+			$allowed = array_map('intval', explode(',', getEntity($element)));
+			return in_array($objectEntity, $allowed, true);
+		}
+
+		return $objectEntity === $entity;
 	}
 
 	/**
@@ -1374,10 +1409,11 @@ class LmdbZoningService
 	{
 		global $conf, $user;
 
+		$entity = !empty($context['entity']) ? (int) $context['entity'] : (int) $conf->entity;
 		$sql = 'INSERT INTO '.MAIN_DB_PREFIX.'lmdbzoning_calculation_log(';
 		$sql .= 'entity, event_code, element_type, fk_element, message, context_data, datec, fk_user_creat';
 		$sql .= ') VALUES (';
-		$sql .= ((int) $conf->entity).', ';
+		$sql .= ((int) $entity).', ';
 		$sql .= "'".$this->db->escape($eventCode)."', ";
 		$sql .= "'".$this->db->escape($elementType)."', ";
 		$sql .= ((int) $fkElement).', ';

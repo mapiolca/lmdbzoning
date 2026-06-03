@@ -81,12 +81,34 @@ class ActionsLmdbZoning
 							'global' => array('showhide' => true, 'hide' => true, 'del' => true),
 						),
 					),
+					'lmdbzoning_geocodecache' => array(
+						'type' => 'element',
+						'icon' => 'database',
+						'lang' => 'lmdbzoning@lmdbzoning',
+						'tooltip' => 'LmdbZoningGeocodeCacheSharingInfo',
+						'enable' => '! empty($conf->lmdbzoning->enabled)',
+						'input' => array(
+							'global' => array('showhide' => true, 'hide' => true, 'del' => true),
+						),
+					),
+					'lmdbzoning_calculationlog' => array(
+						'type' => 'element',
+						'icon' => 'list',
+						'lang' => 'lmdbzoning@lmdbzoning',
+						'tooltip' => 'LmdbZoningCalculationLogSharingInfo',
+						'enable' => '! empty($conf->lmdbzoning->enabled)',
+						'input' => array(
+							'global' => array('showhide' => true, 'hide' => true, 'del' => true),
+						),
+					),
 				),
 				'sharingmodulename' => array(
 					'lmdbzoning_referencepoint' => 'lmdbzoning',
 					'lmdbzoning_profile' => 'lmdbzoning',
 					'lmdbzoning_zone' => 'lmdbzoning',
 					'lmdbzoning_objectzone' => 'lmdbzoning',
+					'lmdbzoning_geocodecache' => 'lmdbzoning',
+					'lmdbzoning_calculationlog' => 'lmdbzoning',
 				),
 			),
 		);
@@ -164,7 +186,8 @@ class ActionsLmdbZoning
 
 		dol_include_once('/lmdbzoning/class/lmdbzoningservice.class.php');
 		$service = new LmdbZoningService($this->db);
-		$result = $service->getObjectZone($object->element, (int) $object->id);
+		$entity = isset($object->entity) && (int) $object->entity > 0 ? (int) $object->entity : 0;
+		$result = $service->getObjectZone($object->element, (int) $object->id, null, $entity);
 		if (empty($result)) {
 			return 0;
 		}

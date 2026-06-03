@@ -70,14 +70,15 @@ class InterfaceLmdbZoningTriggers
 			return 0;
 		}
 
+		$entity = $this->getObjectEntity($object, (int) $conf->entity);
 		$service = new LmdbZoningService($this->db);
-		$result = $service->queueObjectForProfileRecalculation($elementType, $fkElement, $profileRef, (int) $conf->entity);
+		$result = $service->queueObjectForProfileRecalculation($elementType, $fkElement, $profileRef, $entity);
 		if ($result < 0) {
 			$error = !empty($service->error) ? $service->error : 'UnknownError';
 			dol_syslog(__METHOD__.' '.$action.' failed to queue elementType='.$elementType.' fkElement='.$fkElement.' error='.$error, LOG_WARNING);
 			return 0;
 		}
-		dol_syslog(__METHOD__.' '.$action.' queued elementType='.$elementType.' fkElement='.$fkElement.' profile='.$profileRef, LOG_INFO);
+		dol_syslog(__METHOD__.' '.$action.' queued elementType='.$elementType.' fkElement='.$fkElement.' profile='.$profileRef.' entity='.$entity, LOG_INFO);
 
 		return 0;
 	}
@@ -138,5 +139,21 @@ class InterfaceLmdbZoningTriggers
 		}
 
 		return 0;
+	}
+
+	/**
+	 * Return object entity with current entity fallback.
+	 *
+	 * @param object $object        Dolibarr object
+	 * @param int    $defaultEntity Default entity
+	 * @return int
+	 */
+	private function getObjectEntity($object, $defaultEntity)
+	{
+		if (isset($object->entity) && (int) $object->entity > 0) {
+			return (int) $object->entity;
+		}
+
+		return (int) $defaultEntity;
 	}
 }

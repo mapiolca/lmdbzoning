@@ -348,7 +348,8 @@ abstract class LmdbZoningCommonObject extends CommonObject
 		}
 		$prefix = $alias !== '' ? $alias.'.' : '';
 		if (function_exists('getEntity')) {
-			return ' AND '.$prefix.'entity IN ('.$this->db->sanitize(getEntity($this->table_element)).')';
+			$entityElement = !empty($this->element) ? $this->element : $this->table_element;
+			return ' AND '.$prefix.'entity IN ('.$this->db->sanitize(getEntity($entityElement)).')';
 		}
 
 		return ' AND '.$prefix.'entity = '.((int) $conf->entity);

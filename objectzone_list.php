@@ -54,7 +54,7 @@ if (!in_array($sortfield, $sortablefields, true)) {
 }
 
 $param = lmdbzoning_objectzone_build_param($search);
-$where = array('t.entity = '.((int) $conf->entity));
+$where = array(function_exists('getEntity') ? 't.entity IN ('.$db->sanitize(getEntity('lmdbzoning_objectzone')).')' : 't.entity = '.((int) $conf->entity));
 if ($search['rowid'] > 0) {
 	$where[] = 't.rowid = '.((int) $search['rowid']);
 }
