@@ -173,9 +173,71 @@ class modLmdbZoning extends DolibarrModules
 	public function remove($options = '')
 	{
 		$sql = array();
+		$savedConstants = $this->fetchLmdbZoningConstants();
 		$this->syncMulticompanySharing(0);
 
-		return $this->_remove($sql, $options);
+		$result = $this->_remove($sql, $options);
+		if ($result > 0 && !empty($savedConstants)) {
+			$this->restoreLmdbZoningConstants($savedConstants);
+		}
+
+		return $result;
+	}
+
+	/**
+	 * Fetch existing lmdbzoning constants before module deactivation.
+	 *
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function fetchLmdbZoningConstants()
+	{
+		$constants = array();
+		$sql = 'SELECT name, value, type, visible, note, entity';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'const';
+		$sql .= " WHERE name LIKE 'LMDBZONING\\_%'";
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return $constants;
+		}
+		while ($row = $this->db->fetch_object($resql)) {
+			$constants[] = array(
+				'name' => $row->name,
+				'value' => $row->value,
+				'type' => $row->type,
+				'visible' => (int) $row->visible,
+				'note' => $row->note,
+				'entity' => (int) $row->entity,
+			);
+		}
+
+		return $constants;
+	}
+
+	/**
+	 * Restore lmdbzoning constants after module deactivation.
+	 *
+	 * @param array<int,array<string,mixed>> $constants Constants to restore
+	 * @return void
+	 */
+	private function restoreLmdbZoningConstants(array $constants)
+	{
+		if (!function_exists('dolibarr_set_const')) {
+			return;
+		}
+		foreach ($constants as $constant) {
+			if (empty($constant['name'])) {
+				continue;
+			}
+			dolibarr_set_const(
+				$this->db,
+				$constant['name'],
+				isset($constant['value']) ? $constant['value'] : '',
+				empty($constant['type']) ? 'chaine' : $constant['type'],
+				isset($constant['visible']) ? (int) $constant['visible'] : 0,
+				isset($constant['note']) ? $constant['note'] : '',
+				isset($constant['entity']) ? (int) $constant['entity'] : 1
+			);
+		}
 	}
 
 	/**

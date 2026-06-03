@@ -201,9 +201,10 @@ function lmdbzoning_handle_card_actions($object, $cardPage)
  * @param string       $title  Page title
  * @param string       $cardPage Card page
  * @param array<string,string> $filters Filters
+ * @param array<string,mixed> $options Rendering options
  * @return void
  */
-function lmdbzoning_print_object_list($object, $title, $cardPage, array $filters = array())
+function lmdbzoning_print_object_list($object, $title, $cardPage, array $filters = array(), array $options = array())
 {
 	global $langs;
 
@@ -236,7 +237,7 @@ function lmdbzoning_print_object_list($object, $title, $cardPage, array $filters
 				continue;
 			}
 			$value = isset($item->$field) ? $item->$field : '';
-			print '<td>'.lmdbzoning_render_field_output($field, $definition, $value).'</td>';
+			print '<td>'.lmdbzoning_render_list_field_output($field, $definition, $value, $options).'</td>';
 		}
 		print '<td class="right"><a class="button small" href="'.$cardPage.'?id='.(int) $item->id.'">'.$langs->trans('Open').'</a></td>';
 		print '</tr>';
@@ -245,6 +246,49 @@ function lmdbzoning_print_object_list($object, $title, $cardPage, array $filters
 		print '<tr><td colspan="20"><span class="opacitymedium">'.$langs->trans('NoRecordFound').'</span></td></tr>';
 	}
 	print '</table></div>';
+}
+
+/**
+ * Render a list field with optional list-only formatting.
+ *
+ * @param string              $field      Field name
+ * @param array<string,mixed> $definition Field definition
+ * @param mixed               $value      Value
+ * @param array<string,mixed> $options    Rendering options
+ * @return string
+ */
+function lmdbzoning_render_list_field_output($field, array $definition, $value, array $options = array())
+{
+	if (isset($options['truncate_tooltip_fields']) && is_array($options['truncate_tooltip_fields']) && isset($options['truncate_tooltip_fields'][$field])) {
+		return lmdbzoning_render_truncated_tooltip((string) $value, (int) $options['truncate_tooltip_fields'][$field]);
+	}
+
+	return lmdbzoning_render_field_output($field, $definition, $value);
+}
+
+/**
+ * Render truncated text with full content in tooltip.
+ *
+ * @param string $value  Full value
+ * @param int    $length Maximum visible characters
+ * @return string
+ */
+function lmdbzoning_render_truncated_tooltip($value, $length)
+{
+	$length = max(1, (int) $length);
+	if ($value === '') {
+		return '';
+	}
+	$display = $value;
+	if (function_exists('mb_strlen') && function_exists('mb_substr')) {
+		if (mb_strlen($value, 'UTF-8') > $length) {
+			$display = mb_substr($value, 0, $length, 'UTF-8').'...';
+		}
+	} elseif (strlen($value) > $length) {
+		$display = substr($value, 0, $length).'...';
+	}
+
+	return '<span title="'.dol_escape_htmltag($value).'">'.dol_escape_htmltag($display).'</span>';
 }
 
 /**

@@ -10,6 +10,8 @@ lmdbzoning_check_access('read');
 
 $object = new LmdbZoningCalculationLog($db);
 llxHeader('', $langs->trans('CalculationLog'));
-lmdbzoning_print_object_list($object, $langs->trans('CalculationLog'), 'calculation_log_card.php');
+lmdbzoning_print_object_list($object, $langs->trans('CalculationLog'), 'calculation_log_card.php', array(), array(
+	'truncate_tooltip_fields' => array('context_data' => 50),
+));
 llxFooter();
 $db->close();
