@@ -58,7 +58,10 @@ function lmdbzoning_read_object_fields($object)
 			continue;
 		}
 		$type = isset($definition['type']) ? $definition['type'] : '';
-		if (strpos($type, 'integer') === 0 || strpos($type, 'boolean') === 0) {
+		if (strpos($type, 'integer') === 0) {
+			$rawvalue = GETPOST($field, 'alphanohtml');
+			$object->$field = ($rawvalue === '' && empty($definition['notnull'])) ? null : GETPOST($field, 'int');
+		} elseif (strpos($type, 'boolean') === 0) {
 			$object->$field = GETPOST($field, 'int');
 		} elseif (strpos($type, 'double') === 0) {
 			$value = GETPOST($field, 'alphanohtml');
@@ -96,6 +99,8 @@ function lmdbzoning_print_object_form_fields($object)
 			print '<textarea class="flat minwidth500" name="'.$field.'" rows="3">'.dol_escape_htmltag($value).'</textarea>';
 		} elseif (strpos($type, 'boolean') === 0) {
 			print $form->selectyesno($field, (string) $value, 1);
+		} elseif (lmdbzoning_is_resolvable_fk_field($field, $definition)) {
+			print lmdbzoning_render_fk_select($field, $definition, $value, $object);
 		} else {
 			print '<input class="flat minwidth300" type="text" name="'.$field.'" value="'.dol_escape_htmltag($value).'">';
 		}
@@ -122,7 +127,7 @@ function lmdbzoning_print_object_view_fields($object)
 		}
 		$label = $langs->trans(isset($definition['label']) ? $definition['label'] : $field);
 		$value = isset($object->$field) ? $object->$field : '';
-		print '<tr><td class="titlefield">'.$label.'</td><td>'.dol_escape_htmltag((string) $value).'</td></tr>';
+		print '<tr><td class="titlefield">'.$label.'</td><td>'.lmdbzoning_render_field_output($field, $definition, $value).'</td></tr>';
 	}
 }
 
@@ -221,7 +226,7 @@ function lmdbzoning_print_object_list($object, $title, $cardPage, array $filters
 				continue;
 			}
 			$value = isset($item->$field) ? $item->$field : '';
-			print '<td>'.dol_escape_htmltag((string) $value).'</td>';
+			print '<td>'.lmdbzoning_render_field_output($field, $definition, $value).'</td>';
 		}
 		print '<td class="right"><a class="button small" href="'.$cardPage.'?id='.(int) $item->id.'">'.$langs->trans('Open').'</a></td>';
 		print '</tr>';
@@ -230,4 +235,301 @@ function lmdbzoning_print_object_list($object, $title, $cardPage, array $filters
 		print '<tr><td colspan="20"><span class="opacitymedium">'.$langs->trans('NoRecordFound').'</span></td></tr>';
 	}
 	print '</table></div>';
+}
+
+/**
+ * Check if a field can be rendered as a resolved FK select.
+ *
+ * @param string              $field Field name
+ * @param array<string,mixed> $definition Field definition
+ * @return bool
+ */
+function lmdbzoning_is_resolvable_fk_field($field, array $definition)
+{
+	if (!preg_match('/^integer:[^:]+:[^:]+$/', isset($definition['type']) ? $definition['type'] : '')) {
+		return false;
+	}
+	if (in_array($field, array('fk_user_creat', 'fk_user_modif', 'fk_user_calculation', 'fk_user_override'), true)) {
+		return false;
+	}
+
+	return true;
+}
+
+/**
+ * Render a FK select enhanced with Dolibarr ajax_combobox when available.
+ *
+ * @param string              $field Field name
+ * @param array<string,mixed> $definition Field definition
+ * @param mixed               $value Current value
+ * @param CommonObject|null   $sourceObject Source object
+ * @return string
+ */
+function lmdbzoning_render_fk_select($field, array $definition, $value, $sourceObject = null)
+{
+	global $form;
+
+	$options = lmdbzoning_get_fk_options($field, $definition, $sourceObject);
+	if (!is_array($options)) {
+		return '<input class="flat minwidth300" type="text" name="'.$field.'" value="'.dol_escape_htmltag($value).'">';
+	}
+
+	$showempty = empty($definition['notnull']) ? 1 : 0;
+	$selected = ($value === null || $value === '') ? '' : (int) $value;
+	$out = $form->selectarray($field, $options, $selected, $showempty, 0, 0, '', 0, 0, 0, '', 'flat minwidth300', 0);
+	if (function_exists('ajax_combobox')) {
+		$out .= ajax_combobox($field);
+	}
+
+	return $out;
+}
+
+/**
+ * Build select options for a FK field.
+ *
+ * @param string              $field Field name
+ * @param array<string,mixed> $definition Field definition
+ * @param CommonObject|null   $sourceObject Source object
+ * @return array<int,string>|null
+ */
+function lmdbzoning_get_fk_options($field, array $definition, $sourceObject = null)
+{
+	if (strpos(isset($definition['type']) ? $definition['type'] : '', ':Categorie:') !== false) {
+		return lmdbzoning_get_category_options($field);
+	}
+
+	$target = lmdbzoning_parse_fk_target($definition);
+	if (empty($target)) {
+		return null;
+	}
+	dol_include_once('/'.$target['path']);
+	if (!class_exists($target['class'])) {
+		return null;
+	}
+
+	$className = $target['class'];
+	$object = new $className($GLOBALS['db']);
+	if (empty($object->table_element)) {
+		return null;
+	}
+
+	$sql = 'SELECT t.* FROM '.MAIN_DB_PREFIX.$object->table_element.' as t WHERE 1 = 1';
+	if (!empty($object->fields['entity'])) {
+		if (function_exists('getEntity')) {
+			$sql .= ' AND t.entity IN ('.$GLOBALS['db']->sanitize(getEntity($object->table_element)).')';
+		} else {
+			$sql .= ' AND t.entity = '.((int) $GLOBALS['conf']->entity);
+		}
+	}
+	if (!empty($object->fields['active'])) {
+		$sql .= ' AND t.active = 1';
+	}
+	if ($target['class'] === 'LmdbZoningProfileZone' && in_array($field, array('calculated_fk_zone', 'fk_zone'), true) && !empty($sourceObject->fk_profile)) {
+		$sql .= ' AND t.fk_profile = '.((int) $sourceObject->fk_profile);
+	}
+	$sql .= ' ORDER BY '.lmdbzoning_get_fk_order_sql($object);
+
+	return lmdbzoning_fetch_options_from_sql($sql);
+}
+
+/**
+ * Parse a Dolibarr integer object FK type.
+ *
+ * @param array<string,mixed> $definition Field definition
+ * @return array{class:string,path:string}|null
+ */
+function lmdbzoning_parse_fk_target(array $definition)
+{
+	$type = isset($definition['type']) ? $definition['type'] : '';
+	if (!preg_match('/^integer:([^:]+):(.+)$/', $type, $matches)) {
+		return null;
+	}
+
+	return array('class' => $matches[1], 'path' => $matches[2]);
+}
+
+/**
+ * Return SQL order for FK options.
+ *
+ * @param CommonObject $object Object
+ * @return string
+ */
+function lmdbzoning_get_fk_order_sql($object)
+{
+	if (!empty($object->fields['ref'])) {
+		return 't.ref ASC';
+	}
+	if (!empty($object->fields['zone_code'])) {
+		return 't.zone_code ASC';
+	}
+	if (!empty($object->fields['label'])) {
+		return 't.label ASC';
+	}
+
+	return 't.rowid ASC';
+}
+
+/**
+ * Fetch options from SQL rows.
+ *
+ * @param string $sql SQL query
+ * @return array<int,string>
+ */
+function lmdbzoning_fetch_options_from_sql($sql)
+{
+	$options = array();
+	$resql = $GLOBALS['db']->query($sql);
+	if (!$resql) {
+		return $options;
+	}
+	while ($row = $GLOBALS['db']->fetch_object($resql)) {
+		$options[(int) $row->rowid] = lmdbzoning_build_option_label($row);
+	}
+
+	return $options;
+}
+
+/**
+ * Build a readable option label.
+ *
+ * @param stdClass $row SQL row
+ * @return string
+ */
+function lmdbzoning_build_option_label($row)
+{
+	$main = '';
+	if (!empty($row->ref)) {
+		$main = $row->ref;
+	} elseif (!empty($row->zone_code)) {
+		$main = $row->zone_code;
+	}
+	if ($main !== '' && !empty($row->label)) {
+		return $main.' - '.$row->label;
+	}
+	if ($main !== '') {
+		return $main;
+	}
+	if (!empty($row->label)) {
+		return $row->label;
+	}
+
+	return '#'.((int) $row->rowid);
+}
+
+/**
+ * Build category options with type filtering when the target type is known.
+ *
+ * @param string $field Field name
+ * @return array<int,string>|null
+ */
+function lmdbzoning_get_category_options($field)
+{
+	$type = lmdbzoning_get_category_type_for_field($field);
+	if (!class_exists('Categorie') && file_exists(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php')) {
+		require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
+	}
+	if (!class_exists('Categorie')) {
+		return null;
+	}
+
+	$sql = 'SELECT t.rowid, t.label FROM '.MAIN_DB_PREFIX.'categorie as t WHERE 1 = 1';
+	if ($type !== null) {
+		$sql .= ' AND t.type = '.((int) $type);
+	}
+	if (function_exists('getEntity')) {
+		$sql .= ' AND t.entity IN ('.$GLOBALS['db']->sanitize(getEntity('category')).')';
+	} else {
+		$sql .= ' AND t.entity = '.((int) $GLOBALS['conf']->entity);
+	}
+	$sql .= ' ORDER BY t.label ASC';
+
+	return lmdbzoning_fetch_options_from_sql($sql);
+}
+
+/**
+ * Return category type for a lmdbzoning FK field.
+ *
+ * @param string $field Field name
+ * @return int|null
+ */
+function lmdbzoning_get_category_type_for_field($field)
+{
+	$mapping = array(
+		'fk_categorie_project' => array('TYPE_PROJECT', 5),
+		'fk_categorie_powerplantpv' => array('TYPE_PROJECT', 5),
+	);
+	if (!isset($mapping[$field])) {
+		return null;
+	}
+	if (!class_exists('Categorie') && file_exists(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php')) {
+		require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
+	}
+	$constant = 'Categorie::'.$mapping[$field][0];
+	if (defined($constant)) {
+		return constant($constant);
+	}
+
+	return $mapping[$field][1];
+}
+
+/**
+ * Render field output.
+ *
+ * @param string              $field Field name
+ * @param array<string,mixed> $definition Field definition
+ * @param mixed               $value Value
+ * @return string
+ */
+function lmdbzoning_render_field_output($field, array $definition, $value)
+{
+	if ($value === null || $value === '') {
+		return '';
+	}
+	if (lmdbzoning_is_resolvable_fk_field($field, $definition)) {
+		$html = lmdbzoning_render_fk_output($field, $definition, (int) $value);
+		if ($html !== '') {
+			return $html;
+		}
+	}
+
+	return dol_escape_htmltag((string) $value);
+}
+
+/**
+ * Render a resolved FK value.
+ *
+ * @param string              $field Field name
+ * @param array<string,mixed> $definition Field definition
+ * @param int                 $value Row id
+ * @return string
+ */
+function lmdbzoning_render_fk_output($field, array $definition, $value)
+{
+	if ($value <= 0) {
+		return '';
+	}
+	$target = lmdbzoning_parse_fk_target($definition);
+	if (empty($target)) {
+		return '';
+	}
+	dol_include_once('/'.$target['path']);
+	if (!class_exists($target['class'])) {
+		return dol_escape_htmltag((string) $value);
+	}
+	$className = $target['class'];
+	$object = new $className($GLOBALS['db']);
+	if (method_exists($object, 'fetch') && $object->fetch($value) > 0) {
+		if (method_exists($object, 'getNomUrl')) {
+			return $object->getNomUrl(1);
+		}
+		if (!empty($object->label)) {
+			return dol_escape_htmltag($object->label);
+		}
+	}
+	$options = lmdbzoning_get_fk_options($field, $definition);
+	if (is_array($options) && isset($options[$value])) {
+		return dol_escape_htmltag($options[$value]);
+	}
+
+	return dol_escape_htmltag((string) $value);
 }
