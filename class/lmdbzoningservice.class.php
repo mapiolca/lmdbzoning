@@ -619,6 +619,44 @@ class LmdbZoningService
 	}
 
 	/**
+	 * Queue one object for profile recalculation without calculating it.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $fkElement   Object id
+	 * @param string $profileRef  Profile reference
+	 * @param int    $entity      Entity id
+	 * @return int
+	 */
+	public function queueObjectForProfileRecalculation($elementType, $fkElement, $profileRef, $entity = 0)
+	{
+		global $conf;
+
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+		$elementType = (string) $elementType;
+		$fkElement = (int) $fkElement;
+		$profileRef = trim((string) $profileRef);
+		if ($elementType === '' || $fkElement <= 0 || $profileRef === '') {
+			$this->error = 'InvalidObjectForRecalculation';
+			return -1;
+		}
+		$definition = self::getZonableObjectDefinition($elementType);
+		if (empty($definition['available'])) {
+			$this->error = 'ObjectTypeNotSupported';
+			return -1;
+		}
+		$profile = $this->fetchProfileByRef($profileRef, $entity);
+		if (!$profile) {
+			$this->error = 'ProfileNotFound';
+			return -1;
+		}
+
+		$result = $this->markObjectZonePending($elementType, $fkElement, $profile, $entity);
+		dol_syslog(__METHOD__.' elementType='.$elementType.' fkElement='.$fkElement.' profile='.$profileRef.' entity='.$entity.' result='.$result, $result < 0 ? LOG_WARNING : LOG_INFO);
+
+		return $result;
+	}
+
+	/**
 	 * Cron wrapper for Dolibarr scheduler.
 	 *
 	 * @param User|null $user User

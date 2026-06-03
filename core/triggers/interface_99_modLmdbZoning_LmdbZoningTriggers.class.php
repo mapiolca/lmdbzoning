@@ -1,6 +1,8 @@
 <?php
 /* Copyright (C) 2026  Pierre Ardoin <developpeur@lesmetiersdubatiment.fr> */
 
+dol_include_once('/lmdbzoning/class/lmdbzoningservice.class.php');
+
 /**
  * lmdbzoning triggers.
  */
@@ -45,6 +47,94 @@ class InterfaceLmdbZoningTriggers
 	{
 		if (strpos($action, 'LMDBZONING_') === 0) {
 			dol_syslog(__METHOD__.' '.$action, LOG_DEBUG);
+			return 0;
+		}
+		if (!$this->isWatchedObjectAction($action)) {
+			return 0;
+		}
+		if (empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY)) {
+			return 0;
+		}
+		$profileRef = empty($conf->global->LMDBZONING_DEFAULT_PROFILE) ? '' : (string) $conf->global->LMDBZONING_DEFAULT_PROFILE;
+		if ($profileRef === '') {
+			dol_syslog(__METHOD__.' '.$action.' skipped: missing default profile', LOG_WARNING);
+			return 0;
+		}
+		$elementType = $this->resolveZonableElementType($object);
+		if ($elementType === '') {
+			return 0;
+		}
+		$fkElement = $this->getObjectId($object);
+		if ($fkElement <= 0) {
+			dol_syslog(__METHOD__.' '.$action.' skipped: missing object id for elementType='.$elementType, LOG_WARNING);
+			return 0;
+		}
+
+		$service = new LmdbZoningService($this->db);
+		$result = $service->queueObjectForProfileRecalculation($elementType, $fkElement, $profileRef, (int) $conf->entity);
+		if ($result < 0) {
+			$error = !empty($service->error) ? $service->error : 'UnknownError';
+			dol_syslog(__METHOD__.' '.$action.' failed to queue elementType='.$elementType.' fkElement='.$fkElement.' error='.$error, LOG_WARNING);
+			return 0;
+		}
+		dol_syslog(__METHOD__.' '.$action.' queued elementType='.$elementType.' fkElement='.$fkElement.' profile='.$profileRef, LOG_INFO);
+
+		return 0;
+	}
+
+	/**
+	 * Check if action should trigger a zoning recalculation.
+	 *
+	 * @param string $action Trigger action
+	 * @return bool
+	 */
+	private function isWatchedObjectAction($action)
+	{
+		return (bool) preg_match('/_(CREATE|MODIFY|UPDATE)$/', (string) $action);
+	}
+
+	/**
+	 * Resolve a Dolibarr object to a supported lmdbzoning element type.
+	 *
+	 * @param object $object Dolibarr object
+	 * @return string
+	 */
+	private function resolveZonableElementType($object)
+	{
+		if (!is_object($object)) {
+			return '';
+		}
+		$objectClass = get_class($object);
+		$objectElement = !empty($object->element) ? (string) $object->element : '';
+		$objectTable = !empty($object->table_element) ? (string) $object->table_element : '';
+		foreach (LmdbZoningService::getZonableObjectDefinitions(1) as $elementType => $definition) {
+			if (!empty($definition['class']) && ($objectClass === $definition['class'] || is_a($object, $definition['class']))) {
+				return $elementType;
+			}
+			if ($objectElement !== '' && $objectElement === $elementType) {
+				return $elementType;
+			}
+			if ($objectTable !== '' && !empty($definition['table_element']) && $objectTable === $definition['table_element']) {
+				return $elementType;
+			}
+		}
+
+		return '';
+	}
+
+	/**
+	 * Return object id with Dolibarr-compatible fallbacks.
+	 *
+	 * @param object $object Dolibarr object
+	 * @return int
+	 */
+	private function getObjectId($object)
+	{
+		if (!empty($object->id)) {
+			return (int) $object->id;
+		}
+		if (!empty($object->rowid)) {
+			return (int) $object->rowid;
 		}
 
 		return 0;
