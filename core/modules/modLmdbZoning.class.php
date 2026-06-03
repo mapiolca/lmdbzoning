@@ -62,18 +62,18 @@ class modLmdbZoning extends DolibarrModules
 		);
 
 		$this->const = array(
-			array(1, 'LMDBZONING_GEOCODER_ENABLED', 'chaine', '0', 'Enable geocoder', 0, 'current', 1),
-			array(1, 'LMDBZONING_GEOCODER_PROVIDER', 'chaine', 'geoplateforme', 'Geocoder provider', 0, 'current', 1),
-			array(1, 'LMDBZONING_GEOCODER_API_URL', 'chaine', 'https://data.geopf.fr/geocodage/search', 'Geocoder API URL', 0, 'current', 1),
-			array(1, 'LMDBZONING_GEOCODER_TIMEOUT', 'chaine', '5', 'Geocoder timeout', 0, 'current', 1),
-			array(1, 'LMDBZONING_CACHE_DURATION_DAYS', 'chaine', '365', 'Cache duration', 0, 'current', 1),
-			array(1, 'LMDBZONING_AUTO_APPLY_CATEGORY', 'chaine', '0', 'Auto apply category', 0, 'current', 1),
-			array(1, 'LMDBZONING_ALLOW_MANUAL_OVERRIDE', 'chaine', '1', 'Allow manual override', 0, 'current', 1),
-			array(1, 'LMDBZONING_DEFAULT_PROFILE', 'chaine', 'MAINT_PV_RES_1_9KWC', 'Default profile', 0, 'current', 1),
-			array(1, 'LMDBZONING_CRON_ENABLED', 'chaine', '0', 'Enable cron', 0, 'current', 1),
-			array(1, 'LMDBZONING_CRON_MAX_ITEMS', 'chaine', '50', 'Cron max items', 0, 'current', 1),
-			array(1, 'LMDBZONING_CRON_RETRY_FAILED', 'chaine', '0', 'Retry failed rows', 0, 'current', 1),
-			array(1, 'LMDBZONING_CRON_RECALCULATE_AFTER_DAYS', 'chaine', '0', 'Periodic recalculation', 0, 'current', 1),
+			array('LMDBZONING_GEOCODER_ENABLED', 'chaine', '0', 'Enable geocoder', 0, 'current', 1),
+			array('LMDBZONING_GEOCODER_PROVIDER', 'chaine', 'geoplateforme', 'Geocoder provider', 0, 'current', 1),
+			array('LMDBZONING_GEOCODER_API_URL', 'chaine', 'https://data.geopf.fr/geocodage/search', 'Geocoder API URL', 0, 'current', 1),
+			array('LMDBZONING_GEOCODER_TIMEOUT', 'chaine', '5', 'Geocoder timeout', 0, 'current', 1),
+			array('LMDBZONING_CACHE_DURATION_DAYS', 'chaine', '365', 'Cache duration', 0, 'current', 1),
+			array('LMDBZONING_AUTO_APPLY_CATEGORY', 'chaine', '0', 'Auto apply category', 0, 'current', 1),
+			array('LMDBZONING_ALLOW_MANUAL_OVERRIDE', 'chaine', '1', 'Allow manual override', 0, 'current', 1),
+			array('LMDBZONING_DEFAULT_PROFILE', 'chaine', 'MAINT_PV_RES_1_9KWC', 'Default profile', 0, 'current', 1),
+			array('LMDBZONING_CRON_ENABLED', 'chaine', '0', 'Enable cron', 0, 'current', 1),
+			array('LMDBZONING_CRON_MAX_ITEMS', 'chaine', '50', 'Cron max items', 0, 'current', 1),
+			array('LMDBZONING_CRON_RETRY_FAILED', 'chaine', '0', 'Retry failed rows', 0, 'current', 1),
+			array('LMDBZONING_CRON_RECALCULATE_AFTER_DAYS', 'chaine', '0', 'Periodic recalculation', 0, 'current', 1),
 		);
 
 		$this->tabs = array();
