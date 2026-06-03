@@ -612,6 +612,7 @@ class LmdbZoningService
 				$this->error = 'LmdbZoningCategoryRefreshUnsupported';
 				return $stats;
 			}
+			return $this->refreshObjectCategoriesForField($maxItems, $entity, $categoryField, $categoryFields[$categoryField]);
 		}
 		$total = $this->countRefreshableObjectCategories($entity, $categoryField);
 		$sql = 'SELECT oz.rowid, oz.element_type, oz.fk_element, p.ref as profile_ref';
@@ -643,6 +644,79 @@ class LmdbZoningService
 		}
 		$stats['remaining'] = max(0, $total - $stats['processed']);
 		dol_syslog(__METHOD__.' entity='.$entity.' processed='.$stats['processed'].' ok='.$stats['ok'].' failed='.$stats['failed'].' remaining='.$stats['remaining'], $stats['failed'] > 0 ? LOG_WARNING : LOG_INFO);
+
+		return $stats;
+	}
+
+	/**
+	 * Refresh object categories by enumerating zonable objects for one category field.
+	 *
+	 * @param int                 $maxItems      Max items
+	 * @param int                 $entity        Entity id
+	 * @param string              $categoryField Category field
+	 * @param array<string,mixed> $fieldInfo     Field definition
+	 * @return array<string,int>
+	 */
+	private function refreshObjectCategoriesForField($maxItems, $entity, $categoryField, array $fieldInfo)
+	{
+		global $conf;
+
+		$stats = array('processed' => 0, 'ok' => 0, 'failed' => 0, 'remaining' => 0);
+		$profileRef = empty($conf->global->LMDBZONING_DEFAULT_PROFILE) ? '' : (string) $conf->global->LMDBZONING_DEFAULT_PROFILE;
+		if ($profileRef === '') {
+			$this->error = 'ProfileNotFound';
+			$stats['failed']++;
+			return $stats;
+		}
+		$profile = $this->fetchProfileByRef($profileRef, $entity);
+		if (!$profile) {
+			$this->error = 'ProfileNotFound';
+			$stats['failed']++;
+			return $stats;
+		}
+
+		$definitions = self::getOrderedZonableObjectDefinitions(1);
+		$remainingSlots = max(1, (int) $maxItems);
+		$deferred = 0;
+		foreach ($definitions as $elementType => $definition) {
+			if ($this->isAliasElementType($elementType) || empty($definition['category_field']) || $definition['category_field'] !== $categoryField) {
+				continue;
+			}
+			if ($remainingSlots <= 0) {
+				$deferred += $this->countZonableObjectIds($definition, $entity);
+				continue;
+			}
+			$totalForElement = $this->countZonableObjectIds($definition, $entity);
+			$objectIds = $this->fetchZonableObjectIds($definition, $entity, (int) $profile->id, $elementType, $remainingSlots + 1);
+			if (!is_array($objectIds)) {
+				$stats['failed']++;
+				if (!empty($this->error)) {
+					$this->errors[] = $elementType.': '.$this->error;
+					dol_syslog(__METHOD__.' fetch failed categoryField='.$categoryField.' elementType='.$elementType.' error='.$this->error, LOG_WARNING);
+				}
+				continue;
+			}
+			if (count($objectIds) > $remainingSlots) {
+				$deferred += max(0, $totalForElement - $remainingSlots);
+				$objectIds = array_slice($objectIds, 0, $remainingSlots);
+			}
+			foreach ($objectIds as $fkElement) {
+				$stats['processed']++;
+				$result = $this->calculateZoneForObject($elementType, (int) $fkElement, $profileRef, $entity, 1);
+				if (!empty($result['status']) && $result['status'] === 'ok') {
+					$stats['ok']++;
+				} else {
+					$stats['failed']++;
+				}
+				$remainingSlots--;
+				if ($remainingSlots <= 0) {
+					break;
+				}
+			}
+		}
+
+		$stats['remaining'] = max(0, $deferred);
+		dol_syslog(__METHOD__.' categoryField='.$categoryField.' entity='.$entity.' processed='.$stats['processed'].' ok='.$stats['ok'].' failed='.$stats['failed'].' remaining='.$stats['remaining'], $stats['failed'] > 0 ? LOG_WARNING : LOG_INFO);
 
 		return $stats;
 	}
@@ -927,6 +1001,39 @@ class LmdbZoningService
 		}
 
 		return $ids;
+	}
+
+	/**
+	 * Count zonable objects for one definition.
+	 *
+	 * @param array<string,mixed> $definition Object definition
+	 * @param int                 $entity     Entity id
+	 * @return int
+	 */
+	private function countZonableObjectIds(array $definition, $entity)
+	{
+		$table = !empty($definition['table_element']) ? (string) $definition['table_element'] : '';
+		if ($table === '') {
+			return 0;
+		}
+
+		$sql = 'SELECT COUNT(*) as nb FROM '.MAIN_DB_PREFIX.$table.' as t WHERE 1 = 1';
+		if ($this->tableHasColumn($table, 'entity')) {
+			$sql .= ' AND t.entity IN ('.$this->getEntityFilter($table, $entity).')';
+		}
+		if ($this->tableHasColumn($table, 'statut')) {
+			$sql .= ' AND t.statut >= 0';
+		} elseif ($this->tableHasColumn($table, 'status')) {
+			$sql .= ' AND t.status >= 0';
+		}
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return 0;
+		}
+		$row = $this->db->fetch_object($resql);
+
+		return $row ? (int) $row->nb : 0;
 	}
 
 	/**
