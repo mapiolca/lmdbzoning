@@ -43,4 +43,39 @@ class LmdbZoningProfile extends LmdbZoningCommonObject
 		'fk_user_modif' => array('type' => 'integer:User:user/class/user.class.php', 'label' => 'UserModif', 'enabled' => 1, 'visible' => -2, 'position' => 511),
 		'import_key' => array('type' => 'varchar(14)', 'label' => 'ImportId', 'enabled' => 1, 'visible' => -2, 'position' => 1000),
 	);
+
+	/**
+	 * Fetch profile by id with a strict entity filter.
+	 *
+	 * @param int $id     Profile id
+	 * @param int $entity Entity id
+	 * @return int
+	 */
+	public function fetchInEntity($id, $entity)
+	{
+		$id = (int) $id;
+		$entity = (int) $entity;
+		if ($id <= 0 || $entity <= 0) {
+			$this->error = 'Missing profile id or entity';
+			$this->errors[] = $this->error;
+			return -1;
+		}
+
+		$sql = 'SELECT t.* FROM '.MAIN_DB_PREFIX.$this->table_element.' as t';
+		$sql .= ' WHERE t.rowid = '.$id;
+		$sql .= ' AND t.entity = '.$entity;
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			$this->errors[] = $this->error;
+			return -1;
+		}
+		if (!$this->db->num_rows($resql)) {
+			return 0;
+		}
+
+		$this->hydrateFromRow($this->db->fetch_object($resql));
+
+		return 1;
+	}
 }

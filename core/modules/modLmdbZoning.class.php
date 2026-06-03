@@ -154,10 +154,12 @@ class modLmdbZoning extends DolibarrModules
 		global $conf;
 
 		$sql = array();
+		$this->syncProfileRefUniqueIndex();
 		$result = $this->_load_tables('/lmdbzoning/sql/');
 		if ($result < 0) {
 			return -1;
 		}
+		$this->syncProfileRefUniqueIndex();
 
 		$this->syncMulticompanySharing(1);
 
@@ -273,6 +275,59 @@ class modLmdbZoning extends DolibarrModules
 			unset($current['lmdbzoning']);
 		}
 		dolibarr_set_const($this->db, 'MULTICOMPANY_EXTERNAL_MODULES_SHARING', json_encode($current), 'chaine', 0, '', (int) $conf->entity);
+	}
+
+	/**
+	 * Ensure profile references are unique per entity, not globally.
+	 *
+	 * @return void
+	 */
+	private function syncProfileRefUniqueIndex()
+	{
+		$indexes = $this->getTableIndexes('lmdbzoning_profile');
+		if (empty($indexes)) {
+			return;
+		}
+
+		$expectedName = 'uk_lmdbzoning_profile_ref';
+		$expectedColumns = array('entity', 'ref');
+		$hasExpectedIndex = false;
+		$indexesToDrop = array();
+
+		foreach ($indexes as $indexName => $index) {
+			if (empty($index['unique'])) {
+				continue;
+			}
+			$columns = $index['columns'];
+			if ($indexName === $expectedName && $columns === $expectedColumns) {
+				$hasExpectedIndex = true;
+				continue;
+			}
+			if ($indexName === $expectedName || $columns === array('ref')) {
+				$indexesToDrop[] = $indexName;
+			}
+		}
+
+		foreach (array_unique($indexesToDrop) as $indexName) {
+			$sql = 'ALTER TABLE '.MAIN_DB_PREFIX.'lmdbzoning_profile DROP INDEX '.$this->quoteSqlIdentifier($indexName);
+			if (!$this->db->query($sql) && function_exists('dol_syslog')) {
+				dol_syslog(__METHOD__.' failed to drop index '.$indexName.': '.$this->db->lasterror(), LOG_WARNING);
+			}
+		}
+
+		if ($hasExpectedIndex && empty($indexesToDrop)) {
+			return;
+		}
+
+		$indexes = $this->getTableIndexes('lmdbzoning_profile');
+		if (!empty($indexes[$expectedName]) && !empty($indexes[$expectedName]['unique']) && $indexes[$expectedName]['columns'] === $expectedColumns) {
+			return;
+		}
+
+		$sql = 'ALTER TABLE '.MAIN_DB_PREFIX.'lmdbzoning_profile ADD UNIQUE INDEX '.$expectedName.' (entity, ref)';
+		if (!$this->db->query($sql) && function_exists('dol_syslog')) {
+			dol_syslog(__METHOD__.' failed to create profile entity/ref unique index: '.$this->db->lasterror(), LOG_WARNING);
+		}
 	}
 
 	/**
@@ -393,6 +448,46 @@ class modLmdbZoning extends DolibarrModules
 		}
 
 		return $columns;
+	}
+
+	/**
+	 * Return table indexes keyed by index name.
+	 *
+	 * @param string $tableElement Table name without MAIN_DB_PREFIX
+	 * @return array<string,array{unique:int,columns:array<int,string>}>
+	 */
+	private function getTableIndexes($tableElement)
+	{
+		$indexes = array();
+		$sql = 'SHOW INDEX FROM '.MAIN_DB_PREFIX.$tableElement;
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return $indexes;
+		}
+		while ($row = $this->db->fetch_object($resql)) {
+			$keyName = (string) $row->Key_name;
+			if (!isset($indexes[$keyName])) {
+				$indexes[$keyName] = array('unique' => empty($row->Non_unique) ? 1 : 0, 'columns' => array());
+			}
+			$indexes[$keyName]['columns'][(int) $row->Seq_in_index] = (string) $row->Column_name;
+		}
+		foreach ($indexes as $keyName => $index) {
+			ksort($indexes[$keyName]['columns']);
+			$indexes[$keyName]['columns'] = array_values($indexes[$keyName]['columns']);
+		}
+
+		return $indexes;
+	}
+
+	/**
+	 * Quote an SQL identifier.
+	 *
+	 * @param string $identifier Identifier
+	 * @return string
+	 */
+	private function quoteSqlIdentifier($identifier)
+	{
+		return '`'.str_replace('`', '``', $identifier).'`';
 	}
 
 	/**
