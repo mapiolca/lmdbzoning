@@ -188,17 +188,23 @@ function lmdbzoning_create_initial_profile($createCategories = 0)
 {
 	global $db, $conf, $user;
 
-	$existing = new LmdbZoningProfile($db);
-	$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'lmdbzoning_profile WHERE entity = '.((int) $conf->entity)." AND ref = 'MAINT_PV_RES_1_9KWC'";
+	$profileEntityScope = lmdbzoning_get_entity_scope('lmdbzoning_profile');
+	$referencePointEntityScope = lmdbzoning_get_entity_scope('lmdbzoning_referencepoint');
+	$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'lmdbzoning_profile';
+	$sql .= ' WHERE entity IN ('.$profileEntityScope.") AND ref = 'MAINT_PV_RES_1_9KWC'";
+	$sql .= ' ORDER BY CASE WHEN entity = '.((int) $conf->entity).' THEN 0 ELSE 1 END, rowid ASC';
 	$resql = $db->query($sql);
 	if ($resql && $db->fetch_object($resql)) {
+		dolibarr_set_const($db, 'LMDBZONING_DEFAULT_PROFILE', 'MAINT_PV_RES_1_9KWC', 'chaine', 0, '', (int) $conf->entity);
 		return 0;
 	}
 
 	$db->begin();
 	$error = 0;
 	$referenceId = 0;
-	$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'lmdbzoning_referencepoint WHERE entity = '.((int) $conf->entity)." AND ref = 'MIOS'";
+	$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'lmdbzoning_referencepoint';
+	$sql .= ' WHERE entity IN ('.$referencePointEntityScope.") AND ref = 'MIOS'";
+	$sql .= ' ORDER BY CASE WHEN entity = '.((int) $conf->entity).' THEN 0 ELSE 1 END, rowid ASC';
 	$resql = $db->query($sql);
 	if ($resql && ($obj = $db->fetch_object($resql))) {
 		$referenceId = (int) $obj->rowid;
@@ -212,9 +218,19 @@ function lmdbzoning_create_initial_profile($createCategories = 0)
 		$reference->country_code = 'FR';
 		$reference->geocode_status = 'pending';
 		$reference->active = 1;
-		$referenceId = $reference->create($user);
+		try {
+			$referenceId = $reference->create($user);
+		} catch (Throwable $e) {
+			dol_syslog('lmdbzoning_create_initial_profile reference point create failed: '.$e->getMessage(), LOG_WARNING);
+			$referenceId = -1;
+		}
 		if ($referenceId <= 0) {
-			$error++;
+			$resql = $db->query($sql);
+			if ($resql && ($obj = $db->fetch_object($resql))) {
+				$referenceId = (int) $obj->rowid;
+			} else {
+				$error++;
+			}
 		}
 	}
 
@@ -261,6 +277,29 @@ function lmdbzoning_create_initial_profile($createCategories = 0)
 	$db->commit();
 
 	return 1;
+}
+
+/**
+ * Return entity scope for an lmdbzoning element in the current entity.
+ *
+ * @param string $element Dolibarr element/table element
+ * @return string
+ */
+function lmdbzoning_get_entity_scope($element)
+{
+	global $conf;
+
+	$entities = array((int) $conf->entity);
+	if (function_exists('getEntity')) {
+		foreach (explode(',', getEntity($element)) as $entity) {
+			$entity = (int) trim($entity);
+			if ($entity > 0) {
+				$entities[] = $entity;
+			}
+		}
+	}
+
+	return implode(',', array_values(array_unique($entities)));
 }
 
 /**
