@@ -13,41 +13,47 @@ lmdbzoning_check_access('read');
 
 $object = new LmdbZoningObjectZone($db);
 $service = new LmdbZoningService($db);
-$limit = GETPOSTINT('limit') > 0 ? GETPOSTINT('limit') : 50;
+$form = new Form($db);
+
+$limit = GETPOSTINT('limit') > 0 ? GETPOSTINT('limit') : (empty($conf->liste_limit) ? 50 : (int) $conf->liste_limit);
 $page = GETPOSTINT('page');
+if ($page < 0) {
+	$page = 0;
+}
 $offset = $page * $limit;
 $sortfield = GETPOST('sortfield', 'aZ09comma') ?: 't.rowid';
 $sortorder = strtoupper(GETPOST('sortorder', 'aZ09comma') ?: 'DESC');
 $sortorder = $sortorder === 'ASC' ? 'ASC' : 'DESC';
+$removefilter = GETPOST('button_removefilter', 'alpha');
 
 $search = array(
-	'rowid' => GETPOST('search_rowid', 'int'),
-	'fk_profile' => GETPOST('search_fk_profile', 'int'),
-	'element_type' => GETPOST('search_element_type', 'alphanohtml'),
-	'fk_element' => GETPOST('search_fk_element', 'int'),
-	'object_ref_name' => GETPOST('search_object_ref_name', 'alphanohtml'),
-	'zone_code' => GETPOST('search_zone_code', 'alphanohtml'),
-	'calculation_status' => GETPOST('search_calculation_status', 'alphanohtml'),
+	'rowid' => $removefilter ? 0 : GETPOST('search_rowid', 'int'),
+	'fk_profile' => $removefilter ? 0 : GETPOST('search_fk_profile', 'int'),
+	'element_type' => $removefilter ? '' : GETPOST('search_element_type', 'alphanohtml'),
+	'fk_element' => $removefilter ? 0 : GETPOST('search_fk_element', 'int'),
+	'object_ref_name' => $removefilter ? '' : GETPOST('search_object_ref_name', 'alphanohtml'),
+	'zone_code' => $removefilter ? '' : GETPOST('search_zone_code', 'alphanohtml'),
+	'calculation_status' => $removefilter ? '' : GETPOST('search_calculation_status', 'alphanohtml'),
 );
 
 $arrayfields = array(
-	't.rowid' => array('label' => 'ID', 'checked' => 0, 'position' => 1),
-	't.fk_profile' => array('label' => 'LmdbZoningProfile', 'checked' => 1, 'position' => 10),
-	'object_ref_name' => array('label' => 'ReferenceName', 'checked' => 1, 'position' => 20),
-	't.element_type' => array('label' => 'ElementType', 'checked' => 1, 'position' => 30),
-	't.fk_element' => array('label' => 'ElementId', 'checked' => 0, 'position' => 40),
-	't.zone_code' => array('label' => 'ZoneCode', 'checked' => 1, 'position' => 50),
-	't.calculation_status' => array('label' => 'CalculationStatus', 'checked' => 1, 'position' => 60),
-	't.distance_km' => array('label' => 'DistanceKm', 'checked' => 1, 'position' => 70),
-	't.date_calculation' => array('label' => 'CalculationDate', 'checked' => 1, 'position' => 80),
-	't.tms' => array('label' => 'DateModification', 'checked' => 0, 'position' => 90),
+	't.rowid' => array('label' => 'ID', 'checked' => 0, 'enabled' => 1, 'position' => 1),
+	't.fk_profile' => array('label' => 'LmdbZoningProfile', 'checked' => 1, 'enabled' => 1, 'position' => 10),
+	'object_ref_name' => array('label' => 'ReferenceName', 'checked' => 1, 'enabled' => 1, 'position' => 20),
+	't.element_type' => array('label' => 'ElementType', 'checked' => 1, 'enabled' => 1, 'position' => 30),
+	't.fk_element' => array('label' => 'ElementId', 'checked' => 0, 'enabled' => 1, 'position' => 40),
+	't.zone_code' => array('label' => 'ZoneCode', 'checked' => 1, 'enabled' => 1, 'position' => 50),
+	't.calculation_status' => array('label' => 'CalculationStatus', 'checked' => 1, 'enabled' => 1, 'position' => 60),
+	't.distance_km' => array('label' => 'DistanceKm', 'checked' => 1, 'enabled' => 1, 'position' => 70),
+	't.date_calculation' => array('label' => 'CalculationDate', 'checked' => 1, 'enabled' => 1, 'position' => 80),
+	't.tms' => array('label' => 'DateModification', 'checked' => 0, 'enabled' => 1, 'position' => 90),
 );
-$visiblefields = lmdbzoning_list_visible_fields($arrayfields);
-$sortablefields = array('t.rowid', 't.fk_profile', 'object_ref_name', 't.element_type', 't.fk_element', 't.zone_code', 't.calculation_status', 't.distance_km', 't.date_calculation', 't.tms');
+$sortablefields = array('t.rowid', 't.fk_profile', 't.element_type', 't.fk_element', 't.zone_code', 't.calculation_status', 't.distance_km', 't.date_calculation', 't.tms');
 if (!in_array($sortfield, $sortablefields, true)) {
 	$sortfield = 't.rowid';
 }
 
+$param = lmdbzoning_objectzone_build_param($search);
 $where = array('t.entity = '.((int) $conf->entity));
 if ($search['rowid'] > 0) {
 	$where[] = 't.rowid = '.((int) $search['rowid']);
@@ -68,55 +74,27 @@ if ($search['calculation_status'] !== '') {
 	$where[] = "t.calculation_status LIKE '%".$db->escape($search['calculation_status'])."%'";
 }
 
-$num = 0;
-$needsReferenceScan = ($search['object_ref_name'] !== '' || $sortfield === 'object_ref_name');
+$needsReferenceScan = ($search['object_ref_name'] !== '');
+$nbtotalofrecords = 0;
 if (!$needsReferenceScan) {
 	$sql = 'SELECT COUNT(t.rowid) as nb';
 	$sql .= ' FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as t';
 	$sql .= ' WHERE '.implode(' AND ', $where);
 	$resql = $db->query($sql);
 	if ($resql && ($obj = $db->fetch_object($resql))) {
-		$num = (int) $obj->nb;
+		$nbtotalofrecords = (int) $obj->nb;
 	}
 }
 
 $sql = 'SELECT t.*';
 $sql .= ' FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as t';
 $sql .= ' WHERE '.implode(' AND ', $where);
-if ($needsReferenceScan) {
-	$sql .= ' ORDER BY t.element_type ASC, t.fk_element ASC';
-} else {
-	$sql .= ' ORDER BY '.$sortfield.' '.$sortorder;
+$sql .= ' ORDER BY '.$sortfield.' '.$sortorder;
+if (!$needsReferenceScan) {
 	$sql .= ' LIMIT '.((int) $limit).' OFFSET '.((int) $offset);
 }
 $resql = $db->query($sql);
 
-llxHeader('', $langs->trans('ObjectZoneResults'));
-print load_fiche_titre($langs->trans('ObjectZoneResults'), '', 'object_lmdbzoning@lmdbzoning');
-print '<form method="GET" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
-print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'">';
-print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'">';
-lmdbzoning_print_column_selector($arrayfields, $visiblefields);
-print '<div class="div-table-responsive">';
-print '<table class="liste centpercent">';
-print '<tr class="liste_titre">';
-foreach ($arrayfields as $key => $field) {
-	if (empty($visiblefields[$key])) {
-		continue;
-	}
-	print '<th>'.lmdbzoning_sort_link($field['label'], $key, $sortfield, $sortorder, $sortablefields).'</th>';
-}
-print '<th></th></tr>';
-print '<tr class="liste_titre_filter">';
-foreach ($arrayfields as $key => $field) {
-	if (empty($visiblefields[$key])) {
-		continue;
-	}
-	print '<td>'.lmdbzoning_objectzone_filter_input($key, $search).'</td>';
-}
-print '<td class="right"><input class="button" type="submit" value="'.$langs->trans('Search').'"></td></tr>';
-
-$shown = 0;
 $rows = array();
 if ($resql) {
 	while ($row = $db->fetch_object($resql)) {
@@ -128,22 +106,63 @@ if ($resql) {
 	}
 }
 if ($needsReferenceScan) {
-	if ($sortfield === 'object_ref_name') {
-		usort($rows, 'lmdbzoning_sort_objectzone_reference_name');
-		if ($sortorder === 'DESC') {
-			$rows = array_reverse($rows);
-		}
-	}
-	$num = count($rows);
+	$nbtotalofrecords = count($rows);
 	$rows = array_slice($rows, $offset, $limit);
 }
+
+$varpage = $_SERVER['PHP_SELF'];
+$selectedfields = '';
+if (method_exists($form, 'multiSelectArrayWithCheckbox')) {
+	$checkboxleft = function_exists('getDolGlobalString') ? getDolGlobalString('MAIN_CHECKBOX_LEFT_COLUMN', '') : (empty($conf->global->MAIN_CHECKBOX_LEFT_COLUMN) ? '' : $conf->global->MAIN_CHECKBOX_LEFT_COLUMN);
+	$selectedfields = $form->multiSelectArrayWithCheckbox('selectedfields', $arrayfields, $varpage, $checkboxleft);
+}
+
+llxHeader('', $langs->trans('ObjectZoneResults'));
+print '<form method="GET" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
+print '<input type="hidden" name="sortfield" value="'.dol_escape_htmltag($sortfield).'">';
+print '<input type="hidden" name="sortorder" value="'.dol_escape_htmltag($sortorder).'">';
+if (function_exists('print_barre_liste')) {
+	print_barre_liste($langs->trans('ObjectZoneResults'), $page, $_SERVER['PHP_SELF'], $param, $sortfield, $sortorder, '', count($rows), $nbtotalofrecords, 'object_lmdbzoning@lmdbzoning', 0, '', '', $limit, 0, 0, 1);
+} else {
+	print load_fiche_titre($langs->trans('ObjectZoneResults'), '', 'object_lmdbzoning@lmdbzoning');
+}
+print '<div class="div-table-responsive">';
+print '<table class="tagtable nobottomiftotal liste">';
+print '<tr class="liste_titre">';
+foreach ($arrayfields as $key => $field) {
+	if (empty($field['checked'])) {
+		continue;
+	}
+	if ($key === 'object_ref_name') {
+		print '<th>'.$langs->trans($field['label']).'</th>';
+	} elseif (function_exists('print_liste_field_titre')) {
+		print_liste_field_titre($field['label'], $_SERVER['PHP_SELF'], $key, '', $param, '', $sortfield, $sortorder);
+	} else {
+		print '<th>'.$langs->trans($field['label']).'</th>';
+	}
+}
+if (function_exists('getTitleFieldOfList')) {
+	print getTitleFieldOfList($selectedfields, 0, $_SERVER['PHP_SELF'], '', '', '', '', $sortfield, $sortorder, 'center maxwidthsearch ');
+} else {
+	print '<th class="center">'.$selectedfields.'</th>';
+}
+print '</tr>';
+print '<tr class="liste_titre_filter">';
+foreach ($arrayfields as $key => $field) {
+	if (empty($field['checked'])) {
+		continue;
+	}
+	print '<td>'.lmdbzoning_objectzone_filter_input($key, $search).'</td>';
+}
+print '<td class="liste_titre center">'.lmdbzoning_show_filter_buttons($form).'</td>';
+print '</tr>';
+
 foreach ($rows as $resolvedRow) {
 	$row = $resolvedRow['row'];
 	$referenceName = $resolvedRow['reference_name'];
-	$shown++;
 	print '<tr class="oddeven">';
 	foreach ($arrayfields as $key => $field) {
-		if (empty($visiblefields[$key])) {
+		if (empty($field['checked'])) {
 			continue;
 		}
 		print '<td>'.lmdbzoning_objectzone_cell($object, $row, $key, $referenceName).'</td>';
@@ -151,75 +170,56 @@ foreach ($rows as $resolvedRow) {
 	print '<td class="right"><a class="button small" href="objectzone_card.php?id='.(int) $row->rowid.'">'.$langs->trans('Open').'</a></td>';
 	print '</tr>';
 }
-if (!$shown) {
-	print '<tr><td colspan="'.(count($visiblefields) + 1).'"><span class="opacitymedium">'.$langs->trans('NoRecordFound').'</span></td></tr>';
+if (empty($rows)) {
+	print '<tr><td colspan="'.(count($arrayfields) + 1).'"><span class="opacitymedium">'.$langs->trans('NoRecordFound').'</span></td></tr>';
 }
 print '</table></div>';
 print '</form>';
-print '<div class="opacitymedium">'.((int) $num).' '.$langs->trans('Records').'</div>';
 llxFooter();
 $db->close();
 
 /**
- * Return selected list fields.
+ * Build persistent URL parameters.
  *
- * @param array<string,array<string,mixed>> $arrayfields Available fields
- * @return array<string,bool>
- */
-function lmdbzoning_list_visible_fields(array $arrayfields)
-{
-	$selected = GETPOST('visiblefields', 'array');
-	$visible = array();
-	foreach ($arrayfields as $key => $field) {
-		$visible[$key] = is_array($selected) && count($selected) ? in_array($key, $selected, true) : !empty($field['checked']);
-	}
-
-	return $visible;
-}
-
-/**
- * Print column selector.
- *
- * @param array<string,array<string,mixed>> $arrayfields  Available fields
- * @param array<string,bool>                $visiblefields Visible fields
- * @return void
- */
-function lmdbzoning_print_column_selector(array $arrayfields, array $visiblefields)
-{
-	global $langs;
-
-	print '<div class="liste_titre">';
-	foreach ($arrayfields as $key => $field) {
-		print '<label class="small" style="margin-right: 10px">';
-		print '<input type="checkbox" name="visiblefields[]" value="'.dol_escape_htmltag($key).'"'.(!empty($visiblefields[$key]) ? ' checked' : '').'> ';
-		print $langs->trans($field['label']).'</label>';
-	}
-	print '</div>';
-}
-
-/**
- * Build a sortable header link.
- *
- * @param string            $label          Translation key
- * @param string            $field          Field key
- * @param string            $sortfield      Current sort field
- * @param string            $sortorder      Current sort order
- * @param array<int,string> $sortablefields Sortable fields
+ * @param array<string,mixed> $search Search values
  * @return string
  */
-function lmdbzoning_sort_link($label, $field, $sortfield, $sortorder, array $sortablefields)
+function lmdbzoning_objectzone_build_param(array $search)
+{
+	$param = '';
+	foreach ($search as $key => $value) {
+		if ($value !== '' && $value !== 0) {
+			$param .= '&search_'.$key.'='.urlencode((string) $value);
+		}
+	}
+	$selectedfields = GETPOST('selectedfields', 'array');
+	if (is_array($selectedfields)) {
+		foreach ($selectedfields as $field) {
+			$param .= '&selectedfields[]='.urlencode((string) $field);
+		}
+	}
+
+	return $param;
+}
+
+/**
+ * Render native filter buttons when available.
+ *
+ * @param Form $form Form helper
+ * @return string
+ */
+function lmdbzoning_show_filter_buttons($form)
 {
 	global $langs;
 
-	if (!in_array($field, $sortablefields, true)) {
-		return $langs->trans($label);
+	if (method_exists($form, 'showFilterAndCheckAddButtons')) {
+		return $form->showFilterAndCheckAddButtons(0);
 	}
-	$neworder = ($sortfield === $field && $sortorder === 'ASC') ? 'DESC' : 'ASC';
-	$params = $_GET;
-	$params['sortfield'] = $field;
-	$params['sortorder'] = $neworder;
+	if (method_exists($form, 'showFilterButtons')) {
+		return $form->showFilterButtons();
+	}
 
-	return '<a href="'.dol_escape_htmltag($_SERVER['PHP_SELF'].'?'.http_build_query($params)).'">'.$langs->trans($label).'</a>';
+	return '<input type="submit" class="button" value="'.dol_escape_htmltag($langs->trans('Search')).'"> <input type="submit" class="button" name="button_removefilter" value="'.dol_escape_htmltag($langs->trans('RemoveFilter')).'">';
 }
 
 /**
@@ -280,16 +280,4 @@ function lmdbzoning_objectzone_cell($object, $row, $field, $referenceName)
 	$value = isset($row->$name) ? $row->$name : '';
 
 	return lmdbzoning_render_field_output($name, $object->fields[$name], $value);
-}
-
-/**
- * Sort object zone rows by resolved reference/name.
- *
- * @param array<string,mixed> $a First row
- * @param array<string,mixed> $b Second row
- * @return int
- */
-function lmdbzoning_sort_objectzone_reference_name(array $a, array $b)
-{
-	return strcasecmp(strip_tags($a['reference_name']), strip_tags($b['reference_name']));
 }
