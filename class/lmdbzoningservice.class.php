@@ -58,8 +58,8 @@ class LmdbZoningService
 			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project', 'module' => 'project', 'table_element' => 'projet', 'category_type_id' => 6, 'category_field' => 'fk_categorie_project', 'address_strategy' => 'self_then_thirdparty'),
 			'projet' => array('alias' => 'project'),
 			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter', 'module' => 'ficheinter', 'table_element' => 'fichinter', 'category_type_id' => 14, 'category_field' => 'fk_categorie_fichinter', 'address_strategy' => 'thirdparty'),
-			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek', 'module' => 'timesheetweek', 'table_element' => 'timesheet_week', 'category_type_id' => null, 'category_field' => 'fk_categorie_timesheetweek', 'address_strategy' => 'thirdparty'),
-			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_id' => null, 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty'),
+			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek', 'module' => 'timesheetweek', 'table_element' => 'timesheet_week', 'category_type_id' => 450003, 'category_field' => 'fk_categorie_timesheetweek', 'address_strategy' => 'thirdparty'),
+			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_id' => 450004, 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty'),
 		);
 
 		foreach ($definitions as $elementType => $definition) {
