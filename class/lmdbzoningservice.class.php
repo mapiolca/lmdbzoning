@@ -38,6 +38,144 @@ class LmdbZoningService
 	}
 
 	/**
+	 * Return zonable object definitions.
+	 *
+	 * @param int $onlyAvailable 1=only entries with enabled module and usable category type
+	 * @return array<string,array<string,mixed>>
+	 */
+	public static function getZonableObjectDefinitions($onlyAvailable = 0)
+	{
+		$definitions = array(
+			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_constant' => 'TYPE_CUSTOMER', 'category_type' => 'customer', 'category_field' => 'fk_categorie_default', 'address_strategy' => 'self'),
+			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_constant' => 'TYPE_CONTACT', 'category_type' => 'contact', 'category_field' => 'fk_categorie_default', 'address_strategy' => 'self_then_thirdparty'),
+			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal', 'module' => 'propal', 'table_element' => 'propal', 'category_type_constant' => 'TYPE_PROPOSAL', 'category_type' => 'propal', 'category_field' => 'fk_categorie_propal', 'address_strategy' => 'thirdparty'),
+			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande', 'module' => 'commande', 'table_element' => 'commande', 'category_type_constant' => 'TYPE_ORDER', 'category_type' => 'order', 'category_field' => 'fk_categorie_commande', 'address_strategy' => 'thirdparty'),
+			'order' => array('alias' => 'commande'),
+			'facture' => array('file' => '/compta/facture/class/facture.class.php', 'class' => 'Facture', 'module' => 'facture', 'table_element' => 'facture', 'category_type_constant' => 'TYPE_INVOICE', 'category_type' => 'invoice', 'category_field' => 'fk_categorie_default', 'address_strategy' => 'thirdparty'),
+			'invoice' => array('alias' => 'facture'),
+			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat', 'module' => 'contrat', 'table_element' => 'contrat', 'category_type_constant' => 'TYPE_CONTRACT', 'category_type' => 'contract', 'category_field' => 'fk_categorie_contract', 'address_strategy' => 'thirdparty'),
+			'contrat' => array('alias' => 'contract'),
+			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project', 'module' => 'project', 'table_element' => 'projet', 'category_type_constant' => 'TYPE_PROJECT', 'category_type' => 'project', 'category_field' => 'fk_categorie_project', 'address_strategy' => 'self_then_thirdparty'),
+			'projet' => array('alias' => 'project'),
+			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter', 'module' => 'ficheinter', 'table_element' => 'fichinter', 'category_type_constant' => 'TYPE_FICHINTER', 'category_type' => 'fichinter', 'category_field' => 'fk_categorie_fichinter', 'address_strategy' => 'thirdparty'),
+			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek', 'module' => 'timesheetweek', 'table_element' => 'timesheet_week', 'category_type_constant' => 'TYPE_TIMESHEETWEEK', 'category_type' => 'timesheetweek', 'category_field' => 'fk_categorie_timesheetweek', 'address_strategy' => 'thirdparty'),
+			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_constant' => 'TYPE_POWERPLANTPV', 'category_type' => 'powerplantpv', 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty'),
+		);
+
+		foreach ($definitions as $elementType => $definition) {
+			if (!empty($definition['alias'])) {
+				$definitions[$elementType] = $definitions[$definition['alias']];
+			}
+		}
+		foreach ($definitions as $elementType => $definition) {
+			$definitions[$elementType]['resolved_category_type'] = self::resolveCategoryType($definition);
+			$definitions[$elementType]['category_type_supported'] = self::isCategoryTypeSupported($definition);
+			$definitions[$elementType]['available'] = self::isZonableDefinitionAvailable($definitions[$elementType]);
+		}
+		if (empty($onlyAvailable)) {
+			return $definitions;
+		}
+
+		$available = array();
+		foreach ($definitions as $elementType => $definition) {
+			if (!empty($definition['available'])) {
+				$available[$elementType] = $definition;
+			}
+		}
+
+		return $available;
+	}
+
+	/**
+	 * Return one zonable object definition.
+	 *
+	 * @param string $elementType Element type
+	 * @return array<string,mixed>|null
+	 */
+	public static function getZonableObjectDefinition($elementType)
+	{
+		$definitions = self::getZonableObjectDefinitions(0);
+
+		return isset($definitions[$elementType]) ? $definitions[$elementType] : null;
+	}
+
+	/**
+	 * Return category types available for one category FK field.
+	 *
+	 * @param string $field Field name
+	 * @return array<int,string>
+	 */
+	public static function getCategoryTypesForZoneField($field)
+	{
+		if ($field === 'fk_categorie') {
+			$field = 'fk_categorie_default';
+		}
+		$types = array();
+		foreach (self::getZonableObjectDefinitions(1) as $definition) {
+			if (empty($definition['resolved_category_type'])) {
+				continue;
+			}
+			if ($field === 'fk_categorie_default' || (!empty($definition['category_field']) && $definition['category_field'] === $field)) {
+				$types[] = (string) $definition['resolved_category_type'];
+			}
+		}
+		if ($field === 'fk_categorie_default') {
+			$supplierType = self::resolveCategoryType(array('category_type_constant' => 'TYPE_SUPPLIER', 'category_type' => 'supplier'));
+			if ($supplierType !== '' && self::isCategoryTypeSupported(array('category_type_constant' => 'TYPE_SUPPLIER', 'category_type' => 'supplier'))) {
+				$types[] = $supplierType;
+			}
+		}
+
+		return array_values(array_unique($types));
+	}
+
+	/**
+	 * Resolve a Dolibarr category type from a definition.
+	 *
+	 * @param array<string,mixed> $definition Definition
+	 * @return string
+	 */
+	public static function resolveCategoryType(array $definition)
+	{
+		if (!class_exists('Categorie') && defined('DOL_DOCUMENT_ROOT') && file_exists(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php')) {
+			require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
+		}
+		if (class_exists('Categorie') && !empty($definition['category_type_constant'])) {
+			$constant = 'Categorie::'.$definition['category_type_constant'];
+			if (defined($constant)) {
+				return (string) constant($constant);
+			}
+		}
+
+		return !empty($definition['category_type']) ? (string) $definition['category_type'] : '';
+	}
+
+	/**
+	 * Check if the category type is declared by Dolibarr categories.
+	 *
+	 * @param array<string,mixed> $definition Definition
+	 * @return bool
+	 */
+	private static function isCategoryTypeSupported(array $definition)
+	{
+		if (!class_exists('Categorie') && defined('DOL_DOCUMENT_ROOT') && file_exists(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php')) {
+			require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
+		}
+		if (!class_exists('Categorie')) {
+			return false;
+		}
+		if (!empty($definition['category_type_constant']) && defined('Categorie::'.$definition['category_type_constant'])) {
+			return true;
+		}
+		$type = self::resolveCategoryType($definition);
+		if ($type !== '' && property_exists('Categorie', 'MAP_TYPE_TITLE_AREA') && is_array(Categorie::$MAP_TYPE_TITLE_AREA) && array_key_exists($type, Categorie::$MAP_TYPE_TITLE_AREA)) {
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
 	 * Calculate a zone for an address.
 	 *
 	 * @param array<string,mixed> $address    Address fields
@@ -127,12 +265,26 @@ class LmdbZoningService
 	{
 		global $conf, $user;
 
+		$definition = self::getZonableObjectDefinition($elementType);
+		if (empty($definition['available'])) {
+			$result = $this->failedResult('ObjectTypeNotSupported');
+			$result['element_type'] = $elementType;
+			$result['fk_element'] = (int) $fkElement;
+			return $result;
+		}
 		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
 		$address = $this->fetchObjectAddress($elementType, (int) $fkElement);
 		if (!$address) {
 			$result = $this->failedResult('ObjectAddressNotFound');
 			$result['element_type'] = $elementType;
 			$result['fk_element'] = (int) $fkElement;
+			$profile = $this->fetchProfileByRef($profileRef, $entity);
+			if ($profile) {
+				$result['profile_ref'] = $profile->ref;
+				$result['fk_profile'] = (int) $profile->id;
+				$result['fk_referencepoint'] = (int) $profile->fk_referencepoint;
+				$this->storeObjectZoneResult($elementType, (int) $fkElement, $result, $entity);
+			}
 			return $result;
 		}
 		$address['element_type'] = $elementType;
@@ -215,6 +367,9 @@ class LmdbZoningService
 		$category = new Categorie($this->db);
 		if ($category->fetch((int) $zoneResult['fk_categorie']) <= 0) {
 			return -1;
+		}
+		if (!empty($category->type)) {
+			$type = (string) $category->type;
 		}
 		if (isset($category->entity) && isset($object->entity) && (int) $category->entity !== (int) $object->entity) {
 			$this->error = 'CategoryEntityMismatch';
@@ -389,6 +544,66 @@ class LmdbZoningService
 	}
 
 	/**
+	 * Force recalculation of eligible objects for a profile.
+	 *
+	 * @param LmdbZoningProfile $profile  Profile
+	 * @param int               $maxItems Max rows to calculate immediately
+	 * @param int               $entity   Entity id
+	 * @return array<string,int>
+	 */
+	public function forceRecalculateProfileObjects($profile, $maxItems = 50, $entity = 0)
+	{
+		global $conf;
+
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+		$stats = array('queued' => 0, 'processed' => 0, 'ok' => 0, 'failed' => 0, 'remaining' => 0, 'skipped' => 0);
+		if (empty($profile->id) || empty($profile->ref)) {
+			$this->error = 'ProfileNotFound';
+			$stats['failed']++;
+			return $stats;
+		}
+
+		foreach (self::getZonableObjectDefinitions(1) as $elementType => $definition) {
+			if ($this->isAliasElementType($elementType)) {
+				continue;
+			}
+			$objectIds = $this->fetchZonableObjectIds($definition, $entity);
+			if (!is_array($objectIds)) {
+				$stats['failed']++;
+				continue;
+			}
+			foreach ($objectIds as $fkElement) {
+				$result = $this->markObjectZonePending($elementType, (int) $fkElement, $profile, $entity);
+				if ($result > 0) {
+					$stats['queued']++;
+				} elseif ($result < 0) {
+					$stats['failed']++;
+				} else {
+					$stats['skipped']++;
+				}
+			}
+		}
+
+		$todo = $this->fetchPendingProfileRows((int) $profile->id, (int) $maxItems, $entity);
+		if (!is_array($todo)) {
+			$stats['failed']++;
+			return $stats;
+		}
+		foreach ($todo as $row) {
+			$stats['processed']++;
+			$result = $this->calculateZoneForObject($row->element_type, (int) $row->fk_element, $profile->ref, $entity);
+			if (!empty($result['status']) && $result['status'] === 'ok') {
+				$stats['ok']++;
+			} else {
+				$stats['failed']++;
+			}
+		}
+		$stats['remaining'] = $this->countPendingProfileRows((int) $profile->id, $entity);
+
+		return $stats;
+	}
+
+	/**
 	 * Cron wrapper for Dolibarr scheduler.
 	 *
 	 * @param User|null $user User
@@ -407,6 +622,246 @@ class LmdbZoningService
 		dol_syslog(__METHOD__.' processed='.$stats['processed'].' ok='.$stats['ok'].' failed='.$stats['failed'], LOG_INFO);
 
 		return $stats['failed'] > 0 ? -1 : 0;
+	}
+
+	/**
+	 * Check if a zonable definition can be used in the current instance.
+	 *
+	 * @param array<string,mixed> $definition Definition
+	 * @return bool
+	 */
+	private static function isZonableDefinitionAvailable(array $definition)
+	{
+		if (!empty($definition['module']) && !self::isModuleEnabled((string) $definition['module'])) {
+			return false;
+		}
+		if (!class_exists('Categorie') && defined('DOL_DOCUMENT_ROOT') && file_exists(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php')) {
+			require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
+		}
+		if (!class_exists('Categorie') || empty($definition['resolved_category_type']) || empty($definition['category_type_supported'])) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Check Dolibarr module activation with compatible fallbacks.
+	 *
+	 * @param string $moduleKey Module key
+	 * @return bool
+	 */
+	private static function isModuleEnabled($moduleKey)
+	{
+		global $conf;
+
+		if (function_exists('isModEnabled')) {
+			return isModEnabled($moduleKey);
+		}
+		if (isset($conf->$moduleKey) && !empty($conf->$moduleKey->enabled)) {
+			return true;
+		}
+		if (isset($conf->global->{'MAIN_MODULE_'.strtoupper($moduleKey)}) && !empty($conf->global->{'MAIN_MODULE_'.strtoupper($moduleKey)})) {
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Check alias element types that should not be enumerated twice.
+	 *
+	 * @param string $elementType Element type
+	 * @return bool
+	 */
+	private function isAliasElementType($elementType)
+	{
+		return in_array($elementType, array('order', 'invoice', 'contrat', 'projet'), true);
+	}
+
+	/**
+	 * Fetch ids of objects to recalculate.
+	 *
+	 * @param array<string,mixed> $definition Object definition
+	 * @param int                 $entity Entity id
+	 * @return array<int,int>|false
+	 */
+	private function fetchZonableObjectIds(array $definition, $entity)
+	{
+		$table = !empty($definition['table_element']) ? (string) $definition['table_element'] : '';
+		if ($table === '') {
+			return false;
+		}
+
+		$sql = 'SELECT t.rowid FROM '.MAIN_DB_PREFIX.$table.' as t WHERE 1 = 1';
+		if ($this->tableHasColumn($table, 'entity')) {
+			$sql .= ' AND t.entity IN ('.$this->getEntityFilter($table, $entity).')';
+		}
+		if ($this->tableHasColumn($table, 'statut')) {
+			$sql .= ' AND t.statut >= 0';
+		} elseif ($this->tableHasColumn($table, 'status')) {
+			$sql .= ' AND t.status >= 0';
+		}
+		$sql .= ' ORDER BY t.rowid ASC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return false;
+		}
+		$ids = array();
+		while ($row = $this->db->fetch_object($resql)) {
+			$ids[] = (int) $row->rowid;
+		}
+
+		return $ids;
+	}
+
+	/**
+	 * Mark object/profile row as pending without changing existing manual override values.
+	 *
+	 * @param string             $elementType Element type
+	 * @param int                $fkElement   Element id
+	 * @param LmdbZoningProfile  $profile     Profile
+	 * @param int                $entity      Entity id
+	 * @return int
+	 */
+	private function markObjectZonePending($elementType, $fkElement, $profile, $entity)
+	{
+		global $user;
+
+		$current = $this->getObjectZoneForProfile($elementType, $fkElement, (int) $profile->id, $entity);
+		if (is_array($current) && !empty($current['id'])) {
+			$sql = 'UPDATE '.MAIN_DB_PREFIX.'lmdbzoning_object_zone SET';
+			$sql .= " calculation_status = 'pending',";
+			$sql .= " calculation_message = '".$this->db->escape('ForcedRecalculationPending')."',";
+			$sql .= ' fk_user_modif = '.(!empty($user->id) ? ((int) $user->id) : 'null');
+			$sql .= ' WHERE rowid = '.((int) $current['id']);
+		} else {
+			$sql = 'INSERT INTO '.MAIN_DB_PREFIX.'lmdbzoning_object_zone(';
+			$sql .= 'entity, fk_profile, fk_referencepoint, element_type, fk_element, calculation_status, calculation_message, manual_override, datec, fk_user_creat';
+			$sql .= ') VALUES (';
+			$sql .= ((int) $entity).', ';
+			$sql .= ((int) $profile->id).', ';
+			$sql .= ((int) $profile->fk_referencepoint).', ';
+			$sql .= "'".$this->db->escape($elementType)."', ";
+			$sql .= ((int) $fkElement).', ';
+			$sql .= "'pending', ";
+			$sql .= "'".$this->db->escape('ForcedRecalculationPending')."', ";
+			$sql .= '0, ';
+			$sql .= "'".$this->db->idate(dol_now())."', ";
+			$sql .= (!empty($user->id) ? ((int) $user->id) : 'null');
+			$sql .= ')';
+		}
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return -1;
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Fetch pending rows for one profile.
+	 *
+	 * @param int $profileId Profile id
+	 * @param int $maxItems  Max rows
+	 * @param int $entity    Entity id
+	 * @return array<int,object>|false
+	 */
+	private function fetchPendingProfileRows($profileId, $maxItems, $entity)
+	{
+		$sql = 'SELECT oz.rowid, oz.element_type, oz.fk_element';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as oz';
+		$sql .= ' WHERE oz.entity = '.((int) $entity);
+		$sql .= ' AND oz.fk_profile = '.((int) $profileId);
+		$sql .= " AND oz.calculation_status = 'pending'";
+		$sql .= ' ORDER BY oz.date_calculation ASC, oz.rowid ASC';
+		if ($maxItems > 0) {
+			$sql .= $this->db->plimit((int) $maxItems);
+		}
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return false;
+		}
+		$rows = array();
+		while ($row = $this->db->fetch_object($resql)) {
+			$rows[] = $row;
+		}
+
+		return $rows;
+	}
+
+	/**
+	 * Count pending rows for one profile.
+	 *
+	 * @param int $profileId Profile id
+	 * @param int $entity    Entity id
+	 * @return int
+	 */
+	private function countPendingProfileRows($profileId, $entity)
+	{
+		$sql = 'SELECT COUNT(*) as nb FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as oz';
+		$sql .= ' WHERE oz.entity = '.((int) $entity);
+		$sql .= ' AND oz.fk_profile = '.((int) $profileId);
+		$sql .= " AND oz.calculation_status = 'pending'";
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return 0;
+		}
+		$row = $this->db->fetch_object($resql);
+
+		return $row ? (int) $row->nb : 0;
+	}
+
+	/**
+	 * Fetch one object zone row for a profile.
+	 *
+	 * @param string $elementType Element type
+	 * @param int    $fkElement   Element id
+	 * @param int    $profileId   Profile id
+	 * @param int    $entity      Entity id
+	 * @return array<string,mixed>|false
+	 */
+	private function getObjectZoneForProfile($elementType, $fkElement, $profileId, $entity)
+	{
+		$sql = 'SELECT oz.* FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as oz';
+		$sql .= ' WHERE oz.entity = '.((int) $entity);
+		$sql .= ' AND oz.fk_profile = '.((int) $profileId);
+		$sql .= " AND oz.element_type = '".$this->db->escape($elementType)."'";
+		$sql .= ' AND oz.fk_element = '.((int) $fkElement);
+		$sql .= ' ORDER BY oz.rowid DESC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return false;
+		}
+		$row = $this->db->fetch_object($resql);
+		if (!$row) {
+			return false;
+		}
+
+		return $this->objectToArray($row);
+	}
+
+	/**
+	 * Check a DB column exists.
+	 *
+	 * @param string $tableElement Table element without prefix
+	 * @param string $column       Column name
+	 * @return bool
+	 */
+	private function tableHasColumn($tableElement, $column)
+	{
+		$sql = "SHOW COLUMNS FROM ".MAIN_DB_PREFIX.$this->db->escape($tableElement)." LIKE '".$this->db->escape($column)."'";
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			return false;
+		}
+
+		return (bool) $this->db->num_rows($resql);
 	}
 
 	/**
@@ -547,7 +1002,7 @@ class LmdbZoningService
 				return -1;
 			}
 		}
-		$current = $this->getObjectZone($elementType, $fkElement, null, $entity);
+		$current = !empty($result['fk_profile']) ? $this->getObjectZoneForProfile($elementType, $fkElement, (int) $result['fk_profile'], $entity) : $this->getObjectZone($elementType, $fkElement, null, $entity);
 		$manual = is_array($current) && !empty($current['manual_override']);
 		$appliedZoneCode = $manual && !empty($current['zone_code']) ? $current['zone_code'] : (isset($result['zone_code']) ? $result['zone_code'] : '');
 		$appliedFkZone = $manual && !empty($current['fk_zone']) ? (int) $current['fk_zone'] : (isset($result['fk_zone']) ? (int) $result['fk_zone'] : 'null');
@@ -622,15 +1077,23 @@ class LmdbZoningService
 		if (!$object) {
 			return false;
 		}
-		$address = $this->extractAddressFromObject($object);
-		if ($address && trim($this->addressToString($address)) !== '') {
-			return $address;
+		$definition = self::getZonableObjectDefinition($elementType);
+		$strategy = !empty($definition['address_strategy']) ? (string) $definition['address_strategy'] : 'self_then_thirdparty';
+		if ($strategy !== 'thirdparty') {
+			$address = $this->extractAddressFromObject($object);
+			if ($this->isUsableAddress($address)) {
+				return $address;
+			}
 		}
-		if (!empty($object->fk_soc)) {
-			require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
-			$soc = new Societe($this->db);
-			if ($soc->fetch((int) $object->fk_soc) > 0) {
-				return $this->extractAddressFromObject($soc);
+		if ($strategy !== 'self') {
+			foreach (array('fk_soc', 'socid') as $property) {
+				if (empty($object->$property)) {
+					continue;
+				}
+				$address = $this->fetchThirdpartyAddress((int) $object->$property);
+				if ($this->isUsableAddress($address)) {
+					return $address;
+				}
 			}
 		}
 
@@ -646,32 +1109,56 @@ class LmdbZoningService
 	 */
 	private function fetchSupportedObject($elementType, $fkElement)
 	{
-		$map = array(
-			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal'),
-			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande'),
-			'order' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande'),
-			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat'),
-			'contrat' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat'),
-			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project'),
-			'projet' => array('file' => '/projet/class/project.class.php', 'class' => 'Project'),
-			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter'),
-			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek'),
-			'powerplantpv' => array('file' => '/powerplantpv/class/powerplantpv.class.php', 'class' => 'PowerplantPV'),
-		);
-		if (empty($map[$elementType])) {
+		$definition = self::getZonableObjectDefinition($elementType);
+		if (empty($definition) || empty($definition['file']) || empty($definition['class'])) {
 			return false;
 		}
-		dol_include_once($map[$elementType]['file']);
-		if (!class_exists($map[$elementType]['class'])) {
+		dol_include_once($definition['file']);
+		if (!class_exists($definition['class'])) {
 			return false;
 		}
-		$class = $map[$elementType]['class'];
+		$class = $definition['class'];
 		$object = new $class($this->db);
 		if (!method_exists($object, 'fetch') || $object->fetch((int) $fkElement) <= 0) {
 			return false;
 		}
 
 		return $object;
+	}
+
+	/**
+	 * Fetch thirdparty address.
+	 *
+	 * @param int $socid Thirdparty id
+	 * @return array<string,mixed>|false
+	 */
+	private function fetchThirdpartyAddress($socid)
+	{
+		require_once DOL_DOCUMENT_ROOT.'/societe/class/societe.class.php';
+		$soc = new Societe($this->db);
+		if ($soc->fetch((int) $socid) > 0) {
+			return $this->extractAddressFromObject($soc);
+		}
+
+		return false;
+	}
+
+	/**
+	 * Check if an extracted address contains enough data for geocoding.
+	 *
+	 * @param array<string,mixed>|false $address Address
+	 * @return bool
+	 */
+	private function isUsableAddress($address)
+	{
+		if (!is_array($address)) {
+			return false;
+		}
+		if ($this->geocoder->hasValidCoordinates($address)) {
+			return true;
+		}
+
+		return trim($this->addressToString($address)) !== '';
 	}
 
 	/**
@@ -738,20 +1225,9 @@ class LmdbZoningService
 	private function getCategoryForElementType($zone, $elementType)
 	{
 		$field = 'fk_categorie_default';
-		if ($elementType === 'powerplantpv') {
-			$field = 'fk_categorie_powerplantpv';
-		} elseif ($elementType === 'propal') {
-			$field = 'fk_categorie_propal';
-		} elseif ($elementType === 'commande' || $elementType === 'order') {
-			$field = 'fk_categorie_commande';
-		} elseif ($elementType === 'contract' || $elementType === 'contrat') {
-			$field = 'fk_categorie_contract';
-		} elseif ($elementType === 'project' || $elementType === 'projet') {
-			$field = 'fk_categorie_project';
-		} elseif ($elementType === 'fichinter') {
-			$field = 'fk_categorie_fichinter';
-		} elseif ($elementType === 'timesheetweek') {
-			$field = 'fk_categorie_timesheetweek';
+		$definition = self::getZonableObjectDefinition($elementType);
+		if (!empty($definition['category_field'])) {
+			$field = $definition['category_field'];
 		}
 
 		return !empty($zone->$field) ? (int) $zone->$field : (!empty($zone->fk_categorie_default) ? (int) $zone->fk_categorie_default : 0);
@@ -765,20 +1241,9 @@ class LmdbZoningService
 	 */
 	private function getCategoryTypeForElement($elementType)
 	{
-		$map = array(
-			'project' => 'project',
-			'projet' => 'project',
-			'propal' => 'propal',
-			'commande' => 'commande',
-			'order' => 'commande',
-			'contract' => 'contract',
-			'contrat' => 'contract',
-			'fichinter' => 'fichinter',
-			'powerplantpv' => 'powerplantpv',
-			'timesheetweek' => 'timesheetweek',
-		);
+		$definition = self::getZonableObjectDefinition($elementType);
 
-		return isset($map[$elementType]) ? $map[$elementType] : '';
+		return !empty($definition['resolved_category_type']) ? (string) $definition['resolved_category_type'] : '';
 	}
 
 	/**

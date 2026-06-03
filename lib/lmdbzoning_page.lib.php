@@ -217,7 +217,9 @@ function lmdbzoning_print_object_list($object, $title, $cardPage, array $filters
 		$objects = array();
 	}
 
-	print load_fiche_titre($title, '<a class="butAction" href="'.$cardPage.'?action=create">'.$langs->trans('New').'</a>', 'object_'.$object->picto);
+	if ($title !== '') {
+		print load_fiche_titre($title, '<a class="butAction" href="'.$cardPage.'?action=create">'.$langs->trans('New').'</a>', 'object_'.$object->picto);
+	}
 	print '<div class="div-table-responsive"><table class="liste centpercent">';
 	print '<tr class="liste_titre">';
 	foreach ($object->fields as $field => $definition) {
@@ -532,7 +534,7 @@ function lmdbzoning_build_option_label($row)
  */
 function lmdbzoning_get_category_options($field)
 {
-	$type = lmdbzoning_get_category_type_for_field($field);
+	$types = lmdbzoning_get_category_types_for_field($field);
 	if (!class_exists('Categorie') && file_exists(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php')) {
 		require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
 	}
@@ -541,8 +543,14 @@ function lmdbzoning_get_category_options($field)
 	}
 
 	$sql = 'SELECT t.rowid, t.label FROM '.MAIN_DB_PREFIX.'categorie as t WHERE 1 = 1';
-	if ($type !== null) {
-		$sql .= ' AND t.type = '.((int) $type);
+	if (is_array($types) && count($types) > 0) {
+		$escapedTypes = array();
+		foreach ($types as $type) {
+			$escapedTypes[] = "'".$GLOBALS['db']->escape($type)."'";
+		}
+		$sql .= ' AND t.type IN ('.implode(',', $escapedTypes).')';
+	} else {
+		$sql .= ' AND 1 = 0';
 	}
 	if (function_exists('getEntity')) {
 		$sql .= ' AND t.entity IN ('.$GLOBALS['db']->sanitize(getEntity('category')).')';
@@ -555,29 +563,19 @@ function lmdbzoning_get_category_options($field)
 }
 
 /**
- * Return category type for a lmdbzoning FK field.
+ * Return category types for a lmdbzoning FK field.
  *
  * @param string $field Field name
- * @return int|null
+ * @return array<int,string>
  */
-function lmdbzoning_get_category_type_for_field($field)
+function lmdbzoning_get_category_types_for_field($field)
 {
-	$mapping = array(
-		'fk_categorie_project' => array('TYPE_PROJECT', 5),
-		'fk_categorie_powerplantpv' => array('TYPE_PROJECT', 5),
-	);
-	if (!isset($mapping[$field])) {
-		return null;
-	}
-	if (!class_exists('Categorie') && file_exists(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php')) {
-		require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
-	}
-	$constant = 'Categorie::'.$mapping[$field][0];
-	if (defined($constant)) {
-		return constant($constant);
+	dol_include_once('/lmdbzoning/class/lmdbzoningservice.class.php');
+	if (class_exists('LmdbZoningService')) {
+		return LmdbZoningService::getCategoryTypesForZoneField($field);
 	}
 
-	return $mapping[$field][1];
+	return array();
 }
 
 /**

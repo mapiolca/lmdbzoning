@@ -155,3 +155,5 @@ LmdbZoningEventObjectCalculate=Object zoning calculation
 LmdbZoningEventCategoryApply=Category application
 LmdbZoningEventObjectOverride=Manual zone override
 LmdbZoningEventObjectClearOverride=Manual override clearing
+ForceRecalculation=Force recalculation
+LmdbZoningForcedRecalculationDone=Forced recalculation: %s rows queued, %s processed, %s successful, %s failed, %s remaining.
