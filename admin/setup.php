@@ -59,6 +59,19 @@ if ($action === 'createdefaults') {
 	exit;
 }
 
+if ($action === 'refreshcategories') {
+	lmdbzoning_check_post_token();
+	$maxItems = max(1, empty($conf->global->LMDBZONING_CRON_MAX_ITEMS) ? 50 : (int) $conf->global->LMDBZONING_CRON_MAX_ITEMS);
+	$service = new LmdbZoningService($db);
+	$stats = $service->refreshObjectCategories($maxItems, (int) $conf->entity);
+	if (!empty($service->error)) {
+		setEventMessages($service->error, $service->errors, 'errors');
+	}
+	setEventMessages($langs->trans('LmdbZoningRefreshCategoriesDone', $stats['processed'], $stats['ok'], $stats['failed'], $stats['remaining']), null, $stats['failed'] > 0 ? 'warnings' : 'mesgs');
+	header('Location: setup.php');
+	exit;
+}
+
 llxHeader('', $langs->trans('LmdbZoningSetup'));
 $head = lmdbzoningAdminPrepareHead();
 print dol_get_fiche_head($head, 'settings', $langs->trans('LmdbZoning'), -1, 'lmdbzoning@lmdbzoning');
@@ -93,6 +106,17 @@ print '<tr><td class="titlefield">'.$langs->trans('CreateInitialProfile').'</td>
 print '<tr><td>'.$langs->trans('CreateCategoriesAfterConfirmation').'</td><td>'.$form->selectyesno('create_categories', 0, 1).'</td></tr>';
 print '</table>';
 print '<div class="center"><input class="button" type="submit" value="'.$langs->trans('CreateInitialData').'"></div>';
+print '</form>';
+
+print '<br>';
+print load_fiche_titre($langs->trans('CategoryRefresh'), '', 'category');
+print '<form method="POST" action="'.$_SERVER['PHP_SELF'].'">';
+print '<input type="hidden" name="token" value="'.newToken().'">';
+print '<input type="hidden" name="action" value="refreshcategories">';
+print '<table class="border centpercent">';
+print '<tr><td class="titlefield">'.$langs->trans('ForceCategoryRefresh').'</td><td>'.$langs->trans('ForceCategoryRefreshHelp').'</td></tr>';
+print '</table>';
+print '<div class="center"><input class="button" type="submit" value="'.$langs->trans('ForceCategoryRefresh').'"></div>';
 print '</form>';
 
 print dol_get_fiche_end();

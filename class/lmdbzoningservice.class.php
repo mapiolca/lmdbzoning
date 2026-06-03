@@ -233,9 +233,10 @@ class LmdbZoningService
 	 * @param int    $fkElement   Object id
 	 * @param string $profileRef  Profile ref
 	 * @param int    $entity      Entity id
+	 * @param int    $forceApplyCategory Force category application
 	 * @return array<string,mixed>
 	 */
-	public function calculateZoneForObject($elementType, $fkElement, $profileRef, $entity = 0)
+	public function calculateZoneForObject($elementType, $fkElement, $profileRef, $entity = 0, $forceApplyCategory = 0)
 	{
 		global $conf, $user;
 
@@ -266,7 +267,7 @@ class LmdbZoningService
 		$result = $this->calculateZoneForAddress($address, $profileRef, $entity);
 		$result['entity'] = $entity;
 		$this->storeObjectZoneResult($elementType, (int) $fkElement, $result, $entity);
-		if ($result['status'] === 'ok' && !empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY)) {
+		if ($result['status'] === 'ok' && (!empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY) || !empty($forceApplyCategory))) {
 			$this->applyZoneCategoryToObject($elementType, (int) $fkElement, $result);
 		}
 		$this->logEvent('LMDBZONING_OBJECT_CALCULATE', $elementType, (int) $fkElement, isset($result['message']) ? $result['message'] : '', $result);
@@ -518,6 +519,51 @@ class LmdbZoningService
 				$stats['failed']++;
 			}
 		}
+
+		return $stats;
+	}
+
+	/**
+	 * Refresh categories on already known object zones.
+	 *
+	 * @param int $maxItems Max items
+	 * @param int $entity   Entity id
+	 * @return array<string,int>
+	 */
+	public function refreshObjectCategories($maxItems = 50, $entity = 0)
+	{
+		global $conf;
+
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+		$maxItems = max(1, (int) $maxItems);
+		$stats = array('processed' => 0, 'ok' => 0, 'failed' => 0, 'remaining' => 0);
+		$total = $this->countRefreshableObjectCategories($entity);
+		$sql = 'SELECT oz.rowid, oz.element_type, oz.fk_element, p.ref as profile_ref';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as oz';
+		$sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'lmdbzoning_profile as p ON p.rowid = oz.fk_profile';
+		$sql .= ' WHERE oz.entity = '.((int) $entity);
+		$sql .= " AND oz.element_type <> ''";
+		$sql .= ' AND oz.fk_element > 0';
+		$sql .= " AND oz.calculation_status IN ('ok', 'out_of_range', 'failed', 'pending')";
+		$sql .= ' ORDER BY CASE WHEN oz.fk_categorie IS NOT NULL THEN 0 ELSE 1 END, CASE WHEN oz.calculation_status IN (\'ok\', \'out_of_range\', \'failed\') THEN 0 ELSE 1 END, oz.tms ASC, oz.rowid ASC';
+		$sql .= $this->db->plimit($maxItems);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			$stats['failed']++;
+			return $stats;
+		}
+		while ($obj = $this->db->fetch_object($resql)) {
+			$stats['processed']++;
+			$result = $this->calculateZoneForObject($obj->element_type, (int) $obj->fk_element, $obj->profile_ref, $entity, 1);
+			if (!empty($result['status']) && $result['status'] === 'ok') {
+				$stats['ok']++;
+			} else {
+				$stats['failed']++;
+			}
+		}
+		$stats['remaining'] = max(0, $total - $stats['processed']);
+		dol_syslog(__METHOD__.' entity='.$entity.' processed='.$stats['processed'].' ok='.$stats['ok'].' failed='.$stats['failed'].' remaining='.$stats['remaining'], $stats['failed'] > 0 ? LOG_WARNING : LOG_INFO);
 
 		return $stats;
 	}
@@ -894,6 +940,29 @@ class LmdbZoningService
 		$sql .= ' WHERE oz.entity = '.((int) $entity);
 		$sql .= ' AND oz.fk_profile = '.((int) $profileId);
 		$sql .= " AND oz.calculation_status = 'pending'";
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return 0;
+		}
+		$row = $this->db->fetch_object($resql);
+
+		return $row ? (int) $row->nb : 0;
+	}
+
+	/**
+	 * Count refreshable object category rows.
+	 *
+	 * @param int $entity Entity id
+	 * @return int
+	 */
+	private function countRefreshableObjectCategories($entity)
+	{
+		$sql = 'SELECT COUNT(*) as nb FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as oz';
+		$sql .= ' WHERE oz.entity = '.((int) $entity);
+		$sql .= " AND oz.element_type <> ''";
+		$sql .= ' AND oz.fk_element > 0';
+		$sql .= " AND oz.calculation_status IN ('ok', 'out_of_range', 'failed', 'pending')";
 		$resql = $this->db->query($sql);
 		if (!$resql) {
 			$this->error = $this->db->lasterror();

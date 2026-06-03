@@ -52,9 +52,6 @@ class InterfaceLmdbZoningTriggers
 		if (!$this->isWatchedObjectAction($action)) {
 			return 0;
 		}
-		if (empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY)) {
-			return 0;
-		}
 		$profileRef = empty($conf->global->LMDBZONING_DEFAULT_PROFILE) ? '' : (string) $conf->global->LMDBZONING_DEFAULT_PROFILE;
 		if ($profileRef === '') {
 			dol_syslog(__METHOD__.' '.$action.' skipped: missing default profile', LOG_WARNING);
@@ -72,13 +69,16 @@ class InterfaceLmdbZoningTriggers
 
 		$entity = $this->getObjectEntity($object, (int) $conf->entity);
 		$service = new LmdbZoningService($this->db);
-		$result = $service->queueObjectForProfileRecalculation($elementType, $fkElement, $profileRef, $entity);
-		if ($result < 0) {
-			$error = !empty($service->error) ? $service->error : 'UnknownError';
-			dol_syslog(__METHOD__.' '.$action.' failed to queue elementType='.$elementType.' fkElement='.$fkElement.' error='.$error, LOG_WARNING);
+		$result = $service->calculateZoneForObject($elementType, $fkElement, $profileRef, $entity);
+		if (empty($result['status']) || $result['status'] !== 'ok') {
+			$error = !empty($result['message']) ? $result['message'] : (!empty($service->error) ? $service->error : 'UnknownError');
+			dol_syslog(__METHOD__.' '.$action.' failed to calculate elementType='.$elementType.' fkElement='.$fkElement.' error='.$error, LOG_WARNING);
+			if (function_exists('setEventMessages')) {
+				setEventMessages($langs->trans('LmdbZoningTriggerCalculationFailed', $elementType, $fkElement, $error), null, 'warnings');
+			}
 			return 0;
 		}
-		dol_syslog(__METHOD__.' '.$action.' queued elementType='.$elementType.' fkElement='.$fkElement.' profile='.$profileRef.' entity='.$entity, LOG_INFO);
+		dol_syslog(__METHOD__.' '.$action.' calculated elementType='.$elementType.' fkElement='.$fkElement.' profile='.$profileRef.' entity='.$entity.' status='.$result['status'], LOG_INFO);
 
 		return 0;
 	}
