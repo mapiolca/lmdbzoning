@@ -296,7 +296,10 @@ function lmdbzoning_create_category($label, $type)
 	if (!class_exists('Categorie')) {
 		return 0;
 	}
-	$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'categorie WHERE entity = '.((int) $conf->entity)." AND type = ".((int) $type)." AND label = '".$db->escape($label)."'";
+	$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'categorie';
+	$sql .= ' WHERE entity IN ('.lmdbzoning_get_category_entity_scope().')';
+	$sql .= ' AND type = '.((int) $type);
+	$sql .= " AND label = '".$db->escape($label)."'";
 	$resql = $db->query($sql);
 	if ($resql && ($obj = $db->fetch_object($resql))) {
 		return (int) $obj->rowid;
@@ -308,4 +311,26 @@ function lmdbzoning_create_category($label, $type)
 	$result = $category->create($user);
 
 	return $result > 0 ? (int) $result : 0;
+}
+
+/**
+ * Return category entity scope for the current entity.
+ *
+ * @return string
+ */
+function lmdbzoning_get_category_entity_scope()
+{
+	global $conf;
+
+	$entities = array((int) $conf->entity);
+	if (function_exists('getEntity')) {
+		foreach (explode(',', getEntity('category')) as $entity) {
+			$entity = (int) trim($entity);
+			if ($entity > 0) {
+				$entities[] = $entity;
+			}
+		}
+	}
+
+	return implode(',', array_values(array_unique($entities)));
 }

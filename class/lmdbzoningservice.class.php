@@ -351,7 +351,7 @@ class LmdbZoningService
 		if (!empty($category->type)) {
 			$type = (int) $category->type;
 		}
-		if (isset($category->entity) && isset($object->entity) && (int) $category->entity !== (int) $object->entity) {
+		if (!$this->isCategoryInEntityScope($category, $entity)) {
 			$this->error = 'CategoryEntityMismatch';
 			return -1;
 		}
@@ -1319,12 +1319,30 @@ class LmdbZoningService
 		}
 		$objectEntity = (int) $object->entity;
 		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
-		if (function_exists('getEntity')) {
-			$allowed = array_map('intval', explode(',', getEntity($element)));
-			return in_array($objectEntity, $allowed, true);
-		}
+		$allowed = array_map('intval', explode(',', $this->getEntityForScope($element, $entity)));
 
-		return $objectEntity === $entity;
+		return in_array($objectEntity, $allowed, true);
+	}
+
+	/**
+	 * Check category entity against the allowed Multicompany category scope.
+	 *
+	 * @param object $category Category object
+	 * @param int    $entity   Current entity
+	 * @return bool
+	 */
+	private function isCategoryInEntityScope($category, $entity = 0)
+	{
+		global $conf;
+
+		if (!isset($category->entity)) {
+			return true;
+		}
+		$categoryEntity = (int) $category->entity;
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+		$allowed = array_map('intval', explode(',', $this->getEntityForScope('category', $entity)));
+
+		return in_array($categoryEntity, $allowed, true);
 	}
 
 	/**
@@ -1504,11 +1522,33 @@ class LmdbZoningService
 	 */
 	private function getEntityFilter($element, $entity)
 	{
+		return $this->getEntityForScope($element, $entity);
+	}
+
+	/**
+	 * Return an entity scope string for one element.
+	 *
+	 * @param string $element Element name
+	 * @param int    $entity  Entity id
+	 * @return string
+	 */
+	private function getEntityForScope($element, $entity)
+	{
+		global $conf;
+
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+		$entities = array($entity);
 		if (function_exists('getEntity')) {
-			return getEntity($element);
+			$scope = explode(',', getEntity($element));
+			foreach ($scope as $scopeEntity) {
+				$scopeEntity = (int) trim($scopeEntity);
+				if ($scopeEntity > 0) {
+					$entities[] = $scopeEntity;
+				}
+			}
 		}
 
-		return (string) ((int) $entity);
+		return implode(',', array_values(array_unique($entities)));
 	}
 
 	/**
