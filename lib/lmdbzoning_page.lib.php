@@ -54,6 +54,9 @@ function lmdbzoning_read_object_fields($object)
 		if (in_array($field, array('rowid', 'entity', 'datec', 'tms', 'fk_user_creat', 'fk_user_modif', 'import_key'), true)) {
 			continue;
 		}
+		if (lmdbzoning_is_system_status_field($field)) {
+			continue;
+		}
 		if (!empty($definition['enabled']) && $definition['enabled'] != 1) {
 			continue;
 		}
@@ -86,6 +89,9 @@ function lmdbzoning_print_object_form_fields($object)
 
 	foreach ($object->fields as $field => $definition) {
 		if (in_array($field, array('rowid', 'entity', 'datec', 'tms', 'fk_user_creat', 'fk_user_modif', 'import_key'), true)) {
+			continue;
+		}
+		if (lmdbzoning_is_system_status_field($field)) {
 			continue;
 		}
 		if (empty($definition['visible']) || $definition['visible'] < 0) {
@@ -266,9 +272,23 @@ function lmdbzoning_is_resolvable_fk_field($field, array $definition)
  */
 function lmdbzoning_is_closed_choice_field($field)
 {
+	if (lmdbzoning_is_system_status_field($field)) {
+		return false;
+	}
 	$options = lmdbzoning_get_closed_choice_options($field);
 
 	return is_array($options);
+}
+
+/**
+ * Check if a field is a module-computed status.
+ *
+ * @param string $field Field name
+ * @return bool
+ */
+function lmdbzoning_is_system_status_field($field)
+{
+	return in_array($field, array('geocode_status', 'status', 'calculation_status'), true);
 }
 
 /**
@@ -315,22 +335,6 @@ function lmdbzoning_get_closed_choice_options($field)
 		'source' => array(
 			'manual' => 'LmdbZoningSourceManual',
 			'geoplateforme' => 'LmdbZoningSourceGeoplateforme',
-		),
-		'geocode_status' => array(
-			'ok' => 'LmdbZoningStatusOk',
-			'ambiguous' => 'LmdbZoningStatusAmbiguous',
-			'failed' => 'LmdbZoningStatusFailed',
-		),
-		'status' => array(
-			'ok' => 'LmdbZoningStatusOk',
-			'ambiguous' => 'LmdbZoningStatusAmbiguous',
-			'failed' => 'LmdbZoningStatusFailed',
-		),
-		'calculation_status' => array(
-			'pending' => 'LmdbZoningStatusPending',
-			'ok' => 'LmdbZoningStatusOk',
-			'out_of_range' => 'LmdbZoningStatusOutOfRange',
-			'failed' => 'LmdbZoningStatusFailed',
 		),
 		'distance_method' => array(
 			'air_distance' => 'LmdbZoningDistanceMethodAirDistance',
@@ -589,6 +593,9 @@ function lmdbzoning_render_field_output($field, array $definition, $value)
 	if ($value === null || $value === '') {
 		return '';
 	}
+	if (lmdbzoning_is_system_status_field($field)) {
+		return lmdbzoning_render_status_badge((string) $value);
+	}
 	if (lmdbzoning_is_closed_choice_field($field)) {
 		return lmdbzoning_render_closed_choice_output($field, $value);
 	}
@@ -617,6 +624,30 @@ function lmdbzoning_render_closed_choice_output($field, $value)
 	}
 
 	return dol_escape_htmltag((string) $value);
+}
+
+/**
+ * Render a module status with Dolibarr badge.
+ *
+ * @param string $status Status code
+ * @return string
+ */
+function lmdbzoning_render_status_badge($status)
+{
+	global $langs;
+
+	$mapping = array(
+		'pending' => array('LmdbZoningStatusPending', 'status0'),
+		'ok' => array('LmdbZoningStatusOk', 'status4'),
+		'ambiguous' => array('LmdbZoningStatusAmbiguous', 'status3'),
+		'out_of_range' => array('LmdbZoningStatusOutOfRange', 'status3'),
+		'failed' => array('LmdbZoningStatusFailed', 'status8'),
+	);
+	if (!isset($mapping[$status])) {
+		return dol_escape_htmltag($status);
+	}
+
+	return dolGetStatus($langs->trans($mapping[$status][0]), '', '', $mapping[$status][1], 3);
 }
 
 /**
