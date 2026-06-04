@@ -13,6 +13,8 @@ if (!$user->admin && (!method_exists($user, 'hasRight') || !$user->hasRight('lmd
 }
 
 llxHeader('', $langs->trans('Compatibility'));
+$linkback = '<a href="'.dolBuildUrl(DOL_URL_ROOT.'/admin/modules.php', array('restore_lastsearch_values' => 1)).'">'.img_picto($langs->trans('LmdbZoningBackToModuleList'), 'back', 'class="pictofixedwidth"').'<span class="hideonsmartphone">'.$langs->trans('LmdbZoningBackToModuleList').'</span></a>';
+print load_fiche_titre($langs->trans('LmdbZoning'), $linkback, 'title_setup');
 $head = lmdbzoningAdminPrepareHead();
 print dol_get_fiche_head($head, 'compatibility', $langs->trans('LmdbZoning'), -1, 'lmdbzoning@lmdbzoning');
 

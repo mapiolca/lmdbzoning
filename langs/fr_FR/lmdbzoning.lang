@@ -60,6 +60,7 @@ OverrideCleared=Forçage supprimé
 ManageZones=Gérer les zones
 Open=Ouvrir
 BackToList=Retour à la liste
+LmdbZoningBackToModuleList=Retour à la liste des modules
 RecordSaved=Enregistrement sauvegardé
 RecordDeleted=Enregistrement supprimé
 NoRecordFound=Aucun enregistrement trouvé
