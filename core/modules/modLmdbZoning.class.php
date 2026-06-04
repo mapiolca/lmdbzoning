@@ -36,7 +36,7 @@ class modLmdbZoning extends DolibarrModules
 		$this->depends = array();
 		$this->requiredby = array();
 		$this->conflictwith = array();
-		$this->config_page_url = array('setup.php@lmdbzoning', 'compatibility.php@lmdbzoning');
+		$this->config_page_url = array('setup.php@lmdbzoning');
 		$this->hidden = false;
 		$this->dirs = array('/lmdbzoning/temp');
 
