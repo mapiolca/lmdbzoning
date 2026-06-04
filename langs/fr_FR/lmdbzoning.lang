@@ -130,6 +130,7 @@ ContractCategory=Catégorie contrat
 ContractCategories=Catégories contrat
 ContractCategoriesSaved=Catégories contrat enregistrées
 InvalidContractCategory=Catégorie contrat invalide.
+NoContractCategoryAvailable=Aucune catégorie contrat n'est disponible.
 LmdbZoningProtectedCategory=Zonage
 ProjectCategory=Catégorie projet
 InterventionCategory=Catégorie intervention

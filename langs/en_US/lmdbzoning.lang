@@ -127,6 +127,7 @@ ContractCategory=Contract category
 ContractCategories=Contract categories
 ContractCategoriesSaved=Contract categories saved
 InvalidContractCategory=Invalid contract category.
+NoContractCategoryAvailable=No contract category is available.
 LmdbZoningProtectedCategory=Zoning
 ProjectCategory=Project category
 InterventionCategory=Intervention category

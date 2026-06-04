@@ -23,4 +23,5 @@ Longitude=Längengrad
 ContractCategories=Vertragskategorien
 ContractCategoriesSaved=Vertragskategorien gespeichert
 InvalidContractCategory=Ungültige Vertragskategorie.
+NoContractCategoryAvailable=Keine Vertragskategorie ist verfügbar.
 LmdbZoningProtectedCategory=Zonierung

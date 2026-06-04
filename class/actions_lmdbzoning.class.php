@@ -15,6 +15,9 @@ class ActionsLmdbZoning
 	/** @var array<int,string> */
 	public $errors = array();
 
+	/** @var array<int,string> */
+	public $warnings = array();
+
 	/** @var array<string,mixed> */
 	public $results = array();
 
@@ -212,7 +215,7 @@ class ActionsLmdbZoning
 		if (!$this->isLmdbZoningEnabled()) {
 			return 0;
 		}
-		if (!$this->isHookContext($parameters, 'contractcard')) {
+		if (!$this->isHookContext($parameters, 'contractcard', $hookmanager)) {
 			return 0;
 		}
 
@@ -249,6 +252,41 @@ class ActionsLmdbZoning
 	}
 
 	/**
+	 * Add lmdbzoning contract categories block on existing contract cards.
+	 *
+	 * @param array<string,mixed> $parameters Parameters
+	 * @param object             $object     Object
+	 * @param string             $action     Action
+	 * @param HookManager        $hookmanager Hook manager
+	 * @return int
+	 */
+	public function formConfirm($parameters, &$object, &$action, $hookmanager)
+	{
+		global $user;
+
+		if (!$this->isLmdbZoningEnabled()) {
+			return 0;
+		}
+		if (!$this->isHookContext($parameters, 'contractcard', $hookmanager)) {
+			return 0;
+		}
+		if (!$this->canReadContract($user)) {
+			return 0;
+		}
+
+		$id = $this->getObjectId($object);
+		if ($id <= 0) {
+			return 0;
+		}
+
+		dol_include_once('/lmdbzoning/class/lmdbzoningservice.class.php');
+		$service = new LmdbZoningService($this->db);
+		$this->resprints = $this->renderContractCategoriesBlock($service, $object, $this->getObjectEntity($object), $this->canWriteContractCategories($user));
+
+		return 0;
+	}
+
+	/**
 	 * Add a read-only lmdbzoning block on supported object cards.
 	 *
 	 * @param array<string,mixed> $parameters Parameters
@@ -267,7 +305,7 @@ class ActionsLmdbZoning
 		if (!$this->isLmdbZoningEnabled()) {
 			return 0;
 		}
-		$contexts = $this->getHookContexts($parameters);
+		$contexts = $this->getHookContexts($parameters, $hookmanager);
 		$supported = array('propalcard', 'ordercard', 'contractcard', 'projectcard', 'fichintercard', 'powerplantpvcard', 'timesheetweekcard');
 		if (!array_intersect($contexts, $supported)) {
 			return 0;
@@ -292,9 +330,6 @@ class ActionsLmdbZoning
 			}
 			$out .= '</td></tr>';
 		}
-		if (in_array('contractcard', $contexts, true)) {
-			$out .= $this->renderContractCategoriesRow($service, $object, $entity, $this->canWriteContractCategories($user));
-		}
 		if ($out === '') {
 			return 0;
 		}
@@ -304,7 +339,7 @@ class ActionsLmdbZoning
 	}
 
 	/**
-	 * Render contract categories row.
+	 * Render contract categories block.
 	 *
 	 * @param LmdbZoningService $service  Zoning service
 	 * @param object            $object   Contract object
@@ -312,7 +347,7 @@ class ActionsLmdbZoning
 	 * @param bool              $canWrite Can write categories
 	 * @return string
 	 */
-	private function renderContractCategoriesRow($service, $object, $entity, $canWrite)
+	private function renderContractCategoriesBlock($service, $object, $entity, $canWrite)
 	{
 		global $langs;
 
@@ -331,8 +366,13 @@ class ActionsLmdbZoning
 			}
 		}
 
-		$out = '<tr class="lmdbzoning-contract-categories"><td class="titlefield">'.$langs->trans('ContractCategories').'</td><td>';
-		if ($canWrite && !empty($options)) {
+		$out = '<div class="fichecenter lmdbzoning-contract-categories-block">';
+		$out .= '<div class="underbanner clearboth"></div>';
+		$out .= '<table class="border tableforfield centpercent">';
+		$out .= '<tr class="lmdbzoning-contract-categories"><td class="titlefield">'.$langs->trans('ContractCategories').'</td><td>';
+		if (empty($options) && empty($selectedCategories)) {
+			$out .= '<span class="opacitymedium">'.$langs->trans('NoContractCategoryAvailable').'</span>';
+		} elseif ($canWrite && !empty($options)) {
 			$out .= '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
 			$out .= '<input type="hidden" name="token" value="'.dol_escape_htmltag($this->getNewToken()).'">';
 			$out .= '<input type="hidden" name="action" value="updatelmdbzoningcontractcategories">';
@@ -349,7 +389,7 @@ class ActionsLmdbZoning
 			}
 			$out .= !empty($labels) ? implode(', ', $labels) : $langs->trans('NoRecordFound');
 		}
-		$out .= '</td></tr>';
+		$out .= '</td></tr></table></div><br>';
 
 		return $out;
 	}
@@ -390,9 +430,24 @@ class ActionsLmdbZoning
 	 * @param array<string,mixed> $parameters Hook parameters
 	 * @return array<int,string>
 	 */
-	private function getHookContexts($parameters)
+	private function getHookContexts($parameters, $hookmanager = null)
 	{
-		return explode(':', isset($parameters['context']) ? (string) $parameters['context'] : '');
+		$contexts = array();
+		foreach (array('context', 'currentcontext') as $key) {
+			if (!empty($parameters[$key])) {
+				$contexts = array_merge($contexts, explode(':', (string) $parameters[$key]));
+			}
+		}
+		if (is_object($hookmanager)) {
+			if (!empty($hookmanager->contextarray) && is_array($hookmanager->contextarray)) {
+				$contexts = array_merge($contexts, $hookmanager->contextarray);
+			}
+			if (!empty($hookmanager->context)) {
+				$contexts = array_merge($contexts, explode(':', (string) $hookmanager->context));
+			}
+		}
+
+		return array_values(array_unique(array_filter($contexts)));
 	}
 
 	/**
@@ -402,9 +457,9 @@ class ActionsLmdbZoning
 	 * @param string              $context    Context to check
 	 * @return bool
 	 */
-	private function isHookContext($parameters, $context)
+	private function isHookContext($parameters, $context, $hookmanager = null)
 	{
-		return in_array($context, $this->getHookContexts($parameters), true);
+		return in_array($context, $this->getHookContexts($parameters, $hookmanager), true);
 	}
 
 	/**
@@ -523,6 +578,19 @@ class ActionsLmdbZoning
 	}
 
 	/**
+	 * Check read permission on contracts.
+	 *
+	 * @param User $user User
+	 * @return bool
+	 */
+	private function canReadContract($user)
+	{
+		return $this->userHasRight($user, 'contrat', 'lire')
+			|| $this->userHasRight($user, 'contrat', 'read')
+			|| $this->canWriteContract($user);
+	}
+
+	/**
 	 * Check write permission for contract categories.
 	 *
 	 * @param User $user User
@@ -531,11 +599,21 @@ class ActionsLmdbZoning
 	private function canWriteContractCategories($user)
 	{
 		$canWriteLmdbZoning = $this->userHasRight($user, 'lmdbzoning', 'lmdbzoning', 'write');
-		$canWriteContract = $this->userHasRight($user, 'contrat', 'creer')
+
+		return $canWriteLmdbZoning && $this->canWriteContract($user);
+	}
+
+	/**
+	 * Check write permission on contracts.
+	 *
+	 * @param User $user User
+	 * @return bool
+	 */
+	private function canWriteContract($user)
+	{
+		return $this->userHasRight($user, 'contrat', 'creer')
 			|| $this->userHasRight($user, 'contrat', 'write')
 			|| $this->userHasRight($user, 'contrat', 'contrat', 'write');
-
-		return $canWriteLmdbZoning && $canWriteContract;
 	}
 
 	/**

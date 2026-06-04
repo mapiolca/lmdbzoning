@@ -22,5 +22,6 @@ Latitude=Latitudine
 ContractCategories=Categorie contratto
 ContractCategoriesSaved=Categorie contratto salvate
 InvalidContractCategory=Categoria contratto non valida.
+NoContractCategoryAvailable=Nessuna categoria contratto disponibile.
 LmdbZoningProtectedCategory=Zonizzazione
 Longitude=Longitudine

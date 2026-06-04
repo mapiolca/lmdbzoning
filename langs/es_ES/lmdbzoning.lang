@@ -23,4 +23,5 @@ Longitude=Longitud
 ContractCategories=Categorías de contrato
 ContractCategoriesSaved=Categorías de contrato guardadas
 InvalidContractCategory=Categoría de contrato no válida.
+NoContractCategoryAvailable=No hay ninguna categoría de contrato disponible.
 LmdbZoningProtectedCategory=Zonificación
