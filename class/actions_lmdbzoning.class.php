@@ -327,10 +327,9 @@ class ActionsLmdbZoning
 		$langs->load('lmdbzoning@lmdbzoning');
 		$out = '';
 		if (!empty($result) && array_key_exists('distance_km', $result) && $result['distance_km'] !== null && $result['distance_km'] !== '') {
-			$tooltip = $this->formatDistanceComputedTooltip($result);
-			$title = $tooltip !== '' ? ' title="'.dol_escape_htmltag($tooltip).'"' : '';
+			$tooltipAttributes = $this->getDistanceComputedAjaxTooltipAttributes($object, $elementType, $result);
 			$out .= '<tr class="lmdbzoning-object-block"><td class="titlefield">'.$langs->trans('LmdbZoningDistanceComputed').'</td><td>';
-			$out .= '<span'.$title.'>'.price((float) $result['distance_km']).' '.$langs->trans('km').'</span>';
+			$out .= '<span'.$tooltipAttributes.'>'.price((float) $result['distance_km']).' '.$langs->trans('km').'</span>';
 			$out .= '</td></tr>';
 		}
 		if ($out === '') {
@@ -342,15 +341,89 @@ class ActionsLmdbZoning
 	}
 
 	/**
-	 * Format computed distance tooltip from stored calculation details.
+	 * Complete native Dolibarr AJAX tooltips with lmdbzoning distance details.
 	 *
-	 * @param array<string,mixed> $result Stored zoning result
+	 * @param array<string,mixed> $parameters  Hook parameters
+	 * @param object              $object      Dolibarr object
+	 * @param string              $action      Current action
+	 * @param HookManager         $hookmanager Hook manager
+	 * @return int
+	 */
+	public function getTooltipContent($parameters, &$object, &$action, $hookmanager)
+	{
+		global $conf, $langs, $user;
+
+		if (empty($parameters['params']) || !isset($parameters['tooltipcontentarray']) || !is_array($parameters['params'])) {
+			return 0;
+		}
+		if (empty($parameters['params']['fromajaxtooltip']) || empty($parameters['params']['option']) || $parameters['params']['option'] !== 'lmdbzoningdistance') {
+			return 0;
+		}
+		if (!$this->isLmdbZoningEnabled() || !$this->canReadLmdbZoning($user)) {
+			return 0;
+		}
+		if (empty($object->id)) {
+			return 0;
+		}
+
+		dol_include_once('/lmdbzoning/class/lmdbzoningservice.class.php');
+		$service = new LmdbZoningService($this->db);
+		$elementType = $this->getObjectElementType($object);
+		$entity = $this->getObjectEntity($object);
+		$result = $service->getObjectZone($elementType, (int) $object->id, null, $entity);
+		$payload = is_array($result) ? $this->getDistanceComputedTooltipPayload($result) : array();
+		$langs->load('lmdbzoning@lmdbzoning');
+
+		if (empty($payload)) {
+			$parameters['tooltipcontentarray'] = array($langs->trans('LmdbZoningNoDistanceDetail'));
+			return 0;
+		}
+
+		$parameters['tooltipcontentarray'] = array($this->renderDistanceComputedTooltipHtml($payload));
+
+		return 0;
+	}
+
+	/**
+	 * Return AJAX tooltip attributes for computed distance details.
+	 *
+	 * @param object              $object      Dolibarr object
+	 * @param string              $elementType lmdbzoning element type
+	 * @param array<string,mixed> $result      Stored zoning result
 	 * @return string
 	 */
-	private function formatDistanceComputedTooltip(array $result)
+	private function getDistanceComputedAjaxTooltipAttributes($object, $elementType, array $result)
 	{
-		global $langs;
+		$payload = $this->getDistanceComputedTooltipPayload($result);
+		if (empty($payload)) {
+			return '';
+		}
+		$objectType = $this->getAjaxTooltipObjectType($object, $elementType);
+		if ($objectType === '') {
+			return '';
+		}
 
+		$params = array(
+			'id' => $this->getObjectId($object),
+			'objecttype' => $objectType,
+			'option' => 'lmdbzoningdistance',
+		);
+		$json = json_encode($params);
+		if (!is_string($json) || $json === '') {
+			return '';
+		}
+
+		return ' class="classforajaxtooltip" title="tocomplete" data-params="'.dol_escape_htmltag($json).'"';
+	}
+
+	/**
+	 * Extract computed distance tooltip payload from stored calculation details.
+	 *
+	 * @param array<string,mixed> $result Stored zoning result
+	 * @return array<string,mixed>
+	 */
+	private function getDistanceComputedTooltipPayload(array $result)
+	{
 		$message = '';
 		if (!empty($result['calculation_message'])) {
 			$message = (string) $result['calculation_message'];
@@ -359,29 +432,46 @@ class ActionsLmdbZoning
 		}
 		$prefix = 'LinkedPowerPlantDistances|';
 		if ($message === '' || strpos($message, $prefix) !== 0) {
-			return '';
+			return array();
 		}
 
 		$payload = json_decode(substr($message, strlen($prefix)), true);
 		if (!is_array($payload)) {
-			return '';
+			return array();
 		}
 
-		$lines = array($langs->trans('LmdbZoningLinkedPowerPlantDistances'));
+		return $payload;
+	}
+
+	/**
+	 * Render computed distance tooltip as HTML.
+	 *
+	 * @param array<string,mixed> $payload Tooltip payload
+	 * @return string
+	 */
+	private function renderDistanceComputedTooltipHtml(array $payload)
+	{
+		global $langs;
+
+		$html = '<div class="lmdbzoning-distance-tooltip">';
+		$html .= '<strong>'.$langs->trans('LmdbZoningLinkedPowerPlantDistances').'</strong>';
+		$html .= '<table class="nobordernopadding centpercent small">';
 		if (!empty($payload['items']) && is_array($payload['items'])) {
 			foreach ($payload['items'] as $item) {
 				if (!is_array($item) || !isset($item['distance_km'])) {
 					continue;
 				}
 				$label = !empty($item['label']) ? (string) $item['label'] : (!empty($item['ref']) ? (string) $item['ref'] : '#'.(!empty($item['id']) ? (int) $item['id'] : ''));
-				$lines[] = $label.' : '.price((float) $item['distance_km']).' '.$langs->trans('km');
+				$html .= '<tr><td>'.dol_escape_htmltag($label).'</td><td class="right nowrap">'.price((float) $item['distance_km']).' '.$langs->trans('km').'</td></tr>';
 			}
 		}
 		if (isset($payload['total_km'])) {
-			$lines[] = $langs->trans('Total').' : '.price((float) $payload['total_km']).' '.$langs->trans('km');
+			$html .= '<tr><td><strong>'.$langs->trans('Total').'</strong></td><td class="right nowrap"><strong>'.price((float) $payload['total_km']).' '.$langs->trans('km').'</strong></td></tr>';
 		}
+		$html .= '</table>';
+		$html .= '</div>';
 
-		return implode("\n", $lines);
+		return $html;
 	}
 
 	/**
@@ -622,6 +712,50 @@ class ActionsLmdbZoning
 		}
 
 		return !empty($object->element) ? (string) $object->element : '';
+	}
+
+	/**
+	 * Return canonical lmdbzoning element type for an object.
+	 *
+	 * @param object $object Object
+	 * @return string
+	 */
+	private function getObjectElementType($object)
+	{
+		if (!is_object($object) || empty($object->element)) {
+			return '';
+		}
+		if (class_exists('LmdbZoningService')) {
+			return LmdbZoningService::normalizeZonableElementType((string) $object->element);
+		}
+		$aliases = array(
+			'contrat' => 'contract',
+			'order' => 'commande',
+			'invoice' => 'facture',
+			'powerplant' => 'powerplantpv',
+		);
+
+		return !empty($aliases[$object->element]) ? $aliases[$object->element] : (string) $object->element;
+	}
+
+	/**
+	 * Return objecttype expected by Dolibarr native AJAX tooltip endpoint.
+	 *
+	 * @param object $object      Object
+	 * @param string $elementType Canonical lmdbzoning element type
+	 * @return string
+	 */
+	private function getAjaxTooltipObjectType($object, $elementType)
+	{
+		if (!is_object($object) || empty($object->element)) {
+			return '';
+		}
+		if ($elementType === 'powerplantpv') {
+			$module = !empty($object->module) ? (string) $object->module : 'powerplantpv';
+			return (string) $object->element.'@'.$module;
+		}
+
+		return (string) $object->element;
 	}
 
 	/**
