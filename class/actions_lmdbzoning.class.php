@@ -194,6 +194,61 @@ class ActionsLmdbZoning
 	}
 
 	/**
+	 * Process lmdbzoning contract card actions.
+	 *
+	 * @param array<string,mixed> $parameters Parameters
+	 * @param object             $object     Object
+	 * @param string             $action     Action
+	 * @param HookManager        $hookmanager Hook manager
+	 * @return int
+	 */
+	public function doActions($parameters, &$object, &$action, $hookmanager)
+	{
+		global $langs, $user;
+
+		if ($action !== 'updatelmdbzoningcontractcategories') {
+			return 0;
+		}
+		if (!$this->isLmdbZoningEnabled()) {
+			return 0;
+		}
+		if (!$this->isHookContext($parameters, 'contractcard')) {
+			return 0;
+		}
+
+		$langs->load('lmdbzoning@lmdbzoning');
+		$id = $this->getObjectId($object);
+		if ($id <= 0) {
+			setEventMessages($langs->trans('NoRecordFound'), null, 'errors');
+			return -1;
+		}
+		if (!$this->canWriteContractCategories($user)) {
+			accessforbidden();
+		}
+
+		$this->checkPostToken();
+		$selectedCategories = GETPOST('lmdbzoning_contract_categories', 'array');
+		if (!is_array($selectedCategories)) {
+			$selectedCategories = array();
+		}
+
+		dol_include_once('/lmdbzoning/class/lmdbzoningservice.class.php');
+		$service = new LmdbZoningService($this->db);
+		$entity = $this->getObjectEntity($object);
+		$result = $service->syncLinkedCategoriesForElement('contract', $id, $selectedCategories, $entity);
+		if ($result < 0) {
+			$error = !empty($service->error) ? $service->error : 'InvalidContractCategory';
+			setEventMessages($langs->trans($error), $service->errors, 'errors');
+		} else {
+			setEventMessages($langs->trans('ContractCategoriesSaved'), null, 'mesgs');
+		}
+
+		$url = $_SERVER['PHP_SELF'].'?id='.$id;
+		header('Location: '.$url);
+		exit;
+	}
+
+	/**
 	 * Add a read-only lmdbzoning block on supported object cards.
 	 *
 	 * @param array<string,mixed> $parameters Parameters
@@ -206,10 +261,13 @@ class ActionsLmdbZoning
 	{
 		global $langs, $user;
 
-		if (!method_exists($user, 'hasRight') || !$user->hasRight('lmdbzoning', 'lmdbzoning', 'read')) {
+		if (!$this->canReadLmdbZoning($user)) {
 			return 0;
 		}
-		$contexts = explode(':', isset($parameters['context']) ? $parameters['context'] : '');
+		if (!$this->isLmdbZoningEnabled()) {
+			return 0;
+		}
+		$contexts = $this->getHookContexts($parameters);
 		$supported = array('propalcard', 'ordercard', 'contractcard', 'projectcard', 'fichintercard', 'powerplantpvcard', 'timesheetweekcard');
 		if (!array_intersect($contexts, $supported)) {
 			return 0;
@@ -220,21 +278,330 @@ class ActionsLmdbZoning
 
 		dol_include_once('/lmdbzoning/class/lmdbzoningservice.class.php');
 		$service = new LmdbZoningService($this->db);
-		$entity = isset($object->entity) && (int) $object->entity > 0 ? (int) $object->entity : 0;
-		$result = $service->getObjectZone($object->element, (int) $object->id, null, $entity);
-		if (empty($result)) {
-			return 0;
-		}
+		$entity = $this->getObjectEntity($object);
+		$elementType = $this->getHookElementType($object, $contexts);
+		$result = $service->getObjectZone($elementType, (int) $object->id, null, $entity);
 
 		$langs->load('lmdbzoning@lmdbzoning');
-		$out = '<tr class="lmdbzoning-object-block"><td class="titlefield">'.$langs->trans('LmdbZoning').'</td><td>';
-		$out .= dol_escape_htmltag($result['zone_code']).' - '.price($result['distance_km']).' '.$langs->trans('km');
-		if (!empty($result['manual_override'])) {
-			$out .= ' '.img_picto($langs->trans('ManualOverride'), 'warning');
+		$out = '';
+		if (!empty($result)) {
+			$out .= '<tr class="lmdbzoning-object-block"><td class="titlefield">'.$langs->trans('LmdbZoning').'</td><td>';
+			$out .= dol_escape_htmltag($result['zone_code']).' - '.price($result['distance_km']).' '.$langs->trans('km');
+			if (!empty($result['manual_override'])) {
+				$out .= ' '.img_picto($langs->trans('ManualOverride'), 'warning');
+			}
+			$out .= '</td></tr>';
 		}
-		$out .= '</td></tr>';
+		if (in_array('contractcard', $contexts, true)) {
+			$out .= $this->renderContractCategoriesRow($service, $object, $entity, $this->canWriteContractCategories($user));
+		}
+		if ($out === '') {
+			return 0;
+		}
 		$this->resprints = $out;
 
 		return 0;
+	}
+
+	/**
+	 * Render contract categories row.
+	 *
+	 * @param LmdbZoningService $service  Zoning service
+	 * @param object            $object   Contract object
+	 * @param int               $entity   Entity id
+	 * @param bool              $canWrite Can write categories
+	 * @return string
+	 */
+	private function renderContractCategoriesRow($service, $object, $entity, $canWrite)
+	{
+		global $langs;
+
+		$id = $this->getObjectId($object);
+		if ($id <= 0) {
+			return '';
+		}
+
+		$options = $service->getCategoryOptionsForElementType('contract', $entity);
+		$linkedCategories = $service->getLinkedCategoryIdsForElement('contract', $id, $entity);
+		$protectedCategories = $service->getProtectedZoningCategoryIdsForElement('contract', $id, $entity);
+		$selectedCategories = array_values(array_unique(array_merge($linkedCategories, $protectedCategories)));
+		foreach ($protectedCategories as $categoryId) {
+			if (isset($options[(int) $categoryId])) {
+				$options[(int) $categoryId] .= ' - '.$langs->trans('LmdbZoningProtectedCategory');
+			}
+		}
+
+		$out = '<tr class="lmdbzoning-contract-categories"><td class="titlefield">'.$langs->trans('ContractCategories').'</td><td>';
+		if ($canWrite && !empty($options)) {
+			$out .= '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
+			$out .= '<input type="hidden" name="token" value="'.dol_escape_htmltag($this->getNewToken()).'">';
+			$out .= '<input type="hidden" name="action" value="updatelmdbzoningcontractcategories">';
+			$out .= '<input type="hidden" name="id" value="'.((int) $id).'">';
+			$out .= $this->renderMultiSelect('lmdbzoning_contract_categories', $options, $selectedCategories);
+			$out .= ' <input type="submit" class="button small" value="'.dol_escape_htmltag($langs->trans('Save')).'">';
+			$out .= '</form>';
+		} else {
+			$labels = array();
+			foreach ($selectedCategories as $categoryId) {
+				if (isset($options[(int) $categoryId])) {
+					$labels[] = dol_escape_htmltag($options[(int) $categoryId]);
+				}
+			}
+			$out .= !empty($labels) ? implode(', ', $labels) : $langs->trans('NoRecordFound');
+		}
+		$out .= '</td></tr>';
+
+		return $out;
+	}
+
+	/**
+	 * Render a Dolibarr multiselect2-compatible control.
+	 *
+	 * @param string            $htmlName HTML field name
+	 * @param array<int,string> $options  Options
+	 * @param array<int,int>    $selected Selected values
+	 * @return string
+	 */
+	private function renderMultiSelect($htmlName, array $options, array $selected)
+	{
+		global $form;
+
+		$selected = array_map('intval', $selected);
+		if (is_object($form) && method_exists($form, 'multiselectarray')) {
+			return $form->multiselectarray($htmlName, $options, $selected, 0, 0, 'flat minwidth300', 0, 0, '', '');
+		}
+
+		$htmlId = preg_replace('/[^a-zA-Z0-9_]/', '_', $htmlName);
+		$out = '<select id="'.dol_escape_htmltag($htmlId).'" name="'.dol_escape_htmltag($htmlName).'[]" class="flat minwidth300" multiple="multiple">';
+		foreach ($options as $key => $label) {
+			$out .= '<option value="'.((int) $key).'"'.(in_array((int) $key, $selected, true) ? ' selected' : '').'>'.dol_escape_htmltag($label).'</option>';
+		}
+		$out .= '</select>';
+		if (function_exists('ajax_combobox')) {
+			$out .= ajax_combobox($htmlId);
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Return hook contexts.
+	 *
+	 * @param array<string,mixed> $parameters Hook parameters
+	 * @return array<int,string>
+	 */
+	private function getHookContexts($parameters)
+	{
+		return explode(':', isset($parameters['context']) ? (string) $parameters['context'] : '');
+	}
+
+	/**
+	 * Check if hook context is active.
+	 *
+	 * @param array<string,mixed> $parameters Hook parameters
+	 * @param string              $context    Context to check
+	 * @return bool
+	 */
+	private function isHookContext($parameters, $context)
+	{
+		return in_array($context, $this->getHookContexts($parameters), true);
+	}
+
+	/**
+	 * Return element type used by lmdbzoning for a hook object.
+	 *
+	 * @param object            $object   Object
+	 * @param array<int,string> $contexts Hook contexts
+	 * @return string
+	 */
+	private function getHookElementType($object, array $contexts)
+	{
+		if (in_array('contractcard', $contexts, true)) {
+			return 'contract';
+		}
+
+		return !empty($object->element) ? (string) $object->element : '';
+	}
+
+	/**
+	 * Return object id.
+	 *
+	 * @param object $object Object
+	 * @return int
+	 */
+	private function getObjectId($object)
+	{
+		if (is_object($object) && !empty($object->id)) {
+			return (int) $object->id;
+		}
+		if (is_object($object) && !empty($object->rowid)) {
+			return (int) $object->rowid;
+		}
+		if (function_exists('GETPOSTINT')) {
+			return GETPOSTINT('id');
+		}
+		if (function_exists('GETPOST')) {
+			return (int) GETPOST('id', 'int');
+		}
+
+		return 0;
+	}
+
+	/**
+	 * Return object entity.
+	 *
+	 * @param object $object Object
+	 * @return int
+	 */
+	private function getObjectEntity($object)
+	{
+		if (is_object($object) && isset($object->entity) && (int) $object->entity > 0) {
+			return (int) $object->entity;
+		}
+
+		return 0;
+	}
+
+	/**
+	 * Check lmdbzoning activation.
+	 *
+	 * @return bool
+	 */
+	private function isLmdbZoningEnabled()
+	{
+		global $conf;
+
+		if (function_exists('isModEnabled')) {
+			return isModEnabled('lmdbzoning');
+		}
+
+		return (!empty($conf->lmdbzoning->enabled) || !empty($conf->global->MAIN_MODULE_LMDBZONING));
+	}
+
+	/**
+	 * Check POST CSRF token.
+	 *
+	 * @return void
+	 */
+	private function checkPostToken()
+	{
+		if (function_exists('checkToken')) {
+			if (!checkToken()) {
+				accessforbidden('Bad token');
+			}
+			return;
+		}
+		$token = GETPOST('token', 'alpha');
+		if (empty($_SESSION['newtoken']) || $token !== $_SESSION['newtoken']) {
+			accessforbidden('Bad token');
+		}
+	}
+
+	/**
+	 * Return a fresh Dolibarr token.
+	 *
+	 * @return string
+	 */
+	private function getNewToken()
+	{
+		if (function_exists('newToken')) {
+			return newToken();
+		}
+
+		return !empty($_SESSION['newtoken']) ? (string) $_SESSION['newtoken'] : '';
+	}
+
+	/**
+	 * Check read permission on lmdbzoning.
+	 *
+	 * @param User $user User
+	 * @return bool
+	 */
+	private function canReadLmdbZoning($user)
+	{
+		return $this->userHasRight($user, 'lmdbzoning', 'lmdbzoning', 'read');
+	}
+
+	/**
+	 * Check write permission for contract categories.
+	 *
+	 * @param User $user User
+	 * @return bool
+	 */
+	private function canWriteContractCategories($user)
+	{
+		$canWriteLmdbZoning = $this->userHasRight($user, 'lmdbzoning', 'lmdbzoning', 'write');
+		$canWriteContract = $this->userHasRight($user, 'contrat', 'creer')
+			|| $this->userHasRight($user, 'contrat', 'write')
+			|| $this->userHasRight($user, 'contrat', 'contrat', 'write');
+
+		return $canWriteLmdbZoning && $canWriteContract;
+	}
+
+	/**
+	 * Check a Dolibarr right with hasRight and legacy rights tree fallback.
+	 *
+	 * @param User   $user   User
+	 * @param string $module Module key
+	 * @param string $level1 Right level 1
+	 * @param string $level2 Right level 2
+	 * @param string $level3 Right level 3
+	 * @return bool
+	 */
+	private function userHasRight($user, $module, $level1, $level2 = '', $level3 = '')
+	{
+		if (method_exists($user, 'hasRight')) {
+			if ($level3 !== '' && $user->hasRight($module, $level1, $level2, $level3)) {
+				return true;
+			}
+			if ($level2 !== '' && $user->hasRight($module, $level1, $level2)) {
+				return true;
+			}
+			if ($level2 === '' && $user->hasRight($module, $level1)) {
+				return true;
+			}
+		}
+
+		$path = array($module, $level1);
+		if ($level2 !== '') {
+			$path[] = $level2;
+		}
+		if ($level3 !== '') {
+			$path[] = $level3;
+		}
+		if ($this->userHasLegacyRightPath($user, $path)) {
+			return true;
+		}
+		if ($module === 'contrat' && $level2 !== '' && $this->userHasLegacyRightPath($user, array($module, $level2))) {
+			return true;
+		}
+
+		return false;
+	}
+
+	/**
+	 * Check a legacy $user->rights path.
+	 *
+	 * @param User              $user User
+	 * @param array<int,string> $path Rights path
+	 * @return bool
+	 */
+	private function userHasLegacyRightPath($user, array $path)
+	{
+		if (empty($user->rights)) {
+			return false;
+		}
+		$current = $user->rights;
+		foreach ($path as $segment) {
+			if ($segment === '') {
+				continue;
+			}
+			if (!isset($current->$segment)) {
+				return false;
+			}
+			$current = $current->$segment;
+		}
+
+		return !empty($current);
 	}
 }

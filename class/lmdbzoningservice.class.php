@@ -475,6 +475,185 @@ class LmdbZoningService
 	}
 
 	/**
+	 * Return selectable category options for a supported element type.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $entity      Entity id
+	 * @return array<int,string>
+	 */
+	public function getCategoryOptionsForElementType($elementType, $entity = 0)
+	{
+		$elementType = $this->normalizeCategoryElementType($elementType);
+		$categoryType = $this->getCategoryTypeForElement($elementType);
+		$linkType = $this->getCategoryLinkTypeForElement($elementType);
+		if ($categoryType === '' || $linkType === '' || !$this->categoryLinkTableExists($elementType, $linkType)) {
+			return array();
+		}
+
+		$sql = 'SELECT c.rowid, c.label FROM '.MAIN_DB_PREFIX.'categorie as c';
+		$sql .= ' WHERE c.type = '.((int) $categoryType);
+		$sql .= ' AND c.entity IN ('.$this->getEntityForScope('category', $entity).')';
+		$sql .= ' ORDER BY c.label ASC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return array();
+		}
+
+		$options = array();
+		while ($obj = $this->db->fetch_object($resql)) {
+			$options[(int) $obj->rowid] = (string) $obj->label;
+		}
+
+		return $options;
+	}
+
+	/**
+	 * Return category ids currently linked to one object.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $fkElement   Object id
+	 * @param int    $entity      Entity id
+	 * @return array<int,int>
+	 */
+	public function getLinkedCategoryIdsForElement($elementType, $fkElement, $entity = 0)
+	{
+		$elementType = $this->normalizeCategoryElementType($elementType);
+		$linkType = $this->getCategoryLinkTypeForElement($elementType);
+		$linkDefinition = $this->getCategoryLinkDefinitionForElement($elementType);
+		$categoryType = $this->getCategoryTypeForElement($elementType);
+		if ($categoryType === '' || $linkType === '' || $linkDefinition['table'] === '' || $linkDefinition['object_field'] === '' || $linkDefinition['category_field'] === '') {
+			return array();
+		}
+		if (!$this->categoryLinkTableExists($elementType, $linkType)) {
+			return array();
+		}
+
+		$sql = 'SELECT l.'.$linkDefinition['category_field'].' as fk_categorie';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.$linkDefinition['table'].' as l';
+		$sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'categorie as c ON c.rowid = l.'.$linkDefinition['category_field'];
+		$sql .= ' WHERE l.'.$linkDefinition['object_field'].' = '.((int) $fkElement);
+		$sql .= ' AND c.type = '.((int) $categoryType);
+		$sql .= ' AND c.entity IN ('.$this->getEntityForScope('category', $entity).')';
+		$sql .= ' ORDER BY c.label ASC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return array();
+		}
+
+		$ids = array();
+		while ($obj = $this->db->fetch_object($resql)) {
+			$ids[] = (int) $obj->fk_categorie;
+		}
+
+		return array_values(array_unique($ids));
+	}
+
+	/**
+	 * Return zoning category ids that must stay linked to one object.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $fkElement   Object id
+	 * @param int    $entity      Entity id
+	 * @return array<int,int>
+	 */
+	public function getProtectedZoningCategoryIdsForElement($elementType, $fkElement, $entity = 0)
+	{
+		global $conf;
+
+		$elementType = $this->normalizeCategoryElementType($elementType);
+		$categoryType = $this->getCategoryTypeForElement($elementType);
+		if ($categoryType === '') {
+			return array();
+		}
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+
+		$sql = 'SELECT DISTINCT oz.fk_categorie';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as oz';
+		$sql .= ' INNER JOIN '.MAIN_DB_PREFIX.'categorie as c ON c.rowid = oz.fk_categorie';
+		$sql .= ' WHERE oz.entity = '.((int) $entity);
+		$sql .= " AND oz.element_type = '".$this->db->escape($elementType)."'";
+		$sql .= ' AND oz.fk_element = '.((int) $fkElement);
+		$sql .= ' AND oz.fk_categorie IS NOT NULL';
+		$sql .= ' AND c.type = '.((int) $categoryType);
+		$sql .= ' AND c.entity IN ('.$this->getEntityForScope('category', $entity).')';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return array();
+		}
+
+		$ids = array();
+		while ($obj = $this->db->fetch_object($resql)) {
+			$ids[] = (int) $obj->fk_categorie;
+		}
+
+		return array_values(array_unique($ids));
+	}
+
+	/**
+	 * Synchronize linked categories while preserving zoning categories.
+	 *
+	 * @param string     $elementType         Object element type
+	 * @param int        $fkElement           Object id
+	 * @param array<int,mixed> $selectedCategoryIds Selected category ids
+	 * @param int        $entity              Entity id
+	 * @return int
+	 */
+	public function syncLinkedCategoriesForElement($elementType, $fkElement, array $selectedCategoryIds, $entity = 0)
+	{
+		$elementType = $this->normalizeCategoryElementType($elementType);
+		$linkType = $this->getCategoryLinkTypeForElement($elementType);
+		$linkDefinition = $this->getCategoryLinkDefinitionForElement($elementType);
+		if ($linkType === '' || $linkDefinition['table'] === '' || $linkDefinition['object_field'] === '' || $linkDefinition['category_field'] === '') {
+			$this->error = 'InvalidCategoryField';
+			return -1;
+		}
+		if (!$this->categoryLinkTableExists($elementType, $linkType)) {
+			$this->error = 'InvalidCategoryField';
+			return -1;
+		}
+
+		$options = $this->getCategoryOptionsForElementType($elementType, $entity);
+		$validCategoryIds = array_map('intval', array_keys($options));
+		$requestedCategoryIds = $this->cleanCategoryIdList($selectedCategoryIds);
+		$invalidCategoryIds = array_diff($requestedCategoryIds, $validCategoryIds);
+		if (!empty($invalidCategoryIds)) {
+			$this->error = 'InvalidContractCategory';
+			return -1;
+		}
+
+		$protectedCategoryIds = $this->getProtectedZoningCategoryIdsForElement($elementType, (int) $fkElement, $entity);
+		$targetCategoryIds = array_values(array_unique(array_merge($requestedCategoryIds, $protectedCategoryIds)));
+		$currentCategoryIds = $this->getLinkedCategoryIdsForElement($elementType, (int) $fkElement, $entity);
+		$categoryIdsToDelete = array_diff($currentCategoryIds, $targetCategoryIds);
+		$categoryIdsToAdd = array_diff($targetCategoryIds, $currentCategoryIds);
+
+		$this->db->begin();
+		foreach ($categoryIdsToDelete as $categoryId) {
+			if (in_array((int) $categoryId, $protectedCategoryIds, true)) {
+				continue;
+			}
+			if ($this->deleteCategoryLink($elementType, (int) $fkElement, (int) $categoryId) < 0) {
+				$this->db->rollback();
+				$this->error = $this->db->lasterror();
+				return -1;
+			}
+		}
+		foreach ($categoryIdsToAdd as $categoryId) {
+			if ($this->insertCategoryLink($elementType, (int) $fkElement, (int) $categoryId) < 0) {
+				$this->db->rollback();
+				$this->error = $this->db->lasterror();
+				return -1;
+			}
+		}
+		$this->db->commit();
+
+		return 1;
+	}
+
+	/**
 	 * Return the most unfavorable result by zone priority.
 	 *
 	 * @param array<int,array<string,mixed>> $zoneResults Zone results
@@ -1870,6 +2049,50 @@ class LmdbZoningService
 		}
 
 		return !empty($zone->$field) ? (int) $zone->$field : (!empty($zone->fk_categorie_default) ? (int) $zone->fk_categorie_default : 0);
+	}
+
+	/**
+	 * Normalize category-capable aliases to the canonical element type.
+	 *
+	 * @param string $elementType Element type
+	 * @return string
+	 */
+	private function normalizeCategoryElementType($elementType)
+	{
+		$elementType = (string) $elementType;
+		$aliases = array(
+			'contrat' => 'contract',
+			'order' => 'commande',
+			'invoice' => 'facture',
+			'projet' => 'project',
+		);
+
+		return isset($aliases[$elementType]) ? $aliases[$elementType] : $elementType;
+	}
+
+	/**
+	 * Clean a list of category ids.
+	 *
+	 * @param array<int,mixed> $categoryIds Category ids
+	 * @return array<int,int>
+	 */
+	private function cleanCategoryIdList(array $categoryIds)
+	{
+		$clean = array();
+		foreach ($categoryIds as $categoryId) {
+			if (is_array($categoryId)) {
+				foreach ($this->cleanCategoryIdList($categoryId) as $subCategoryId) {
+					$clean[] = (int) $subCategoryId;
+				}
+				continue;
+			}
+			$categoryId = (int) $categoryId;
+			if ($categoryId > 0) {
+				$clean[] = $categoryId;
+			}
+		}
+
+		return array_values(array_unique($clean));
 	}
 
 	/**

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Ajout d'un multiselect de catégories contrat sur la fiche contrat via hook, avec conservation des catégories issues du zonage.
+
 ## 1.0.0 - 2026-06-03
 
 - Création du module externe `lmdbzoning`.

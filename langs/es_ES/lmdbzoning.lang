@@ -20,3 +20,7 @@ ZoneCode=Código de zona
 Address=Dirección
 Latitude=Latitud
 Longitude=Longitud
+ContractCategories=Categorías de contrato
+ContractCategoriesSaved=Categorías de contrato guardadas
+InvalidContractCategory=Categoría de contrato no válida.
+LmdbZoningProtectedCategory=Zonificación
