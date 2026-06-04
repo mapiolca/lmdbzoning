@@ -1,4 +1,5 @@
 LmdbZoning=lmdbzoning
+LmdbZoningDistanceComputed=Computed distance
 LmdbZoningDesc=Geographical zone calculation for Dolibarr objects
 LmdbZoningDescLong=External module for geographical zone calculation, caching and category application with Multicompany support.
 Zoning=Zoning
@@ -182,6 +183,8 @@ LmdbZoningRefreshCategoriesDone=Category refresh: %s processed, %s successful, %
 LmdbZoningTriggerCalculationFailed=Zoning was not applied for %s #%s: %s
 ProfileNotFound=Zoning profile not found
 LinkedPowerPlantAddressNotFound=Linked PV plant address not found
+LinkedPowerPlantGeocodingFailed=Linked PV plant geocoding failed
+LmdbZoningLinkedPowerPlantDistances=Details by power plant
 MultipleLinkedPowerPlants=Multiple linked PV plants: out of zone on quote
 OutOfZoneNotFound=Out-of-zone profile zone not found
 ShareLmdbzoning_referencepoint=Share reference points

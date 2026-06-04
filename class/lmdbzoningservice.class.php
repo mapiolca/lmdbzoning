@@ -418,6 +418,79 @@ class LmdbZoningService
 	}
 
 	/**
+	 * Return zonable objects linked to a PowerPlantPV record.
+	 *
+	 * @param int $fkPowerPlant Power plant id
+	 * @param int $entity       Entity id
+	 * @return array<int,array<string,mixed>>
+	 */
+	public function getLinkedZonableObjectsForPowerPlant($fkPowerPlant, $entity = 0)
+	{
+		global $conf;
+
+		$fkPowerPlant = (int) $fkPowerPlant;
+		if ($fkPowerPlant <= 0 || !function_exists('isModEnabled') || !isModEnabled('powerplantpv')) {
+			return array();
+		}
+		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
+		$zonableTypeMap = $this->getLinkedThirdpartyZonableTypeMap();
+		if (empty($zonableTypeMap)) {
+			return array();
+		}
+
+		$powerPlantTypes = $this->getPowerPlantLinkedObjectTypes();
+		$escapedPowerPlantTypes = array();
+		foreach ($powerPlantTypes as $powerPlantType) {
+			$escapedPowerPlantTypes[] = "'".$this->db->escape($powerPlantType)."'";
+		}
+		$escapedZonableTypes = array();
+		foreach (array_keys($zonableTypeMap) as $zonableType) {
+			$escapedZonableTypes[] = "'".$this->db->escape($zonableType)."'";
+		}
+
+		$sql = 'SELECT ee.fk_source, ee.sourcetype, ee.fk_target, ee.targettype';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'element_element as ee';
+		$sql .= ' WHERE (ee.fk_source = '.$fkPowerPlant.' AND ee.sourcetype IN ('.implode(',', $escapedPowerPlantTypes).') AND ee.targettype IN ('.implode(',', $escapedZonableTypes).'))';
+		$sql .= ' OR (ee.fk_target = '.$fkPowerPlant.' AND ee.targettype IN ('.implode(',', $escapedPowerPlantTypes).') AND ee.sourcetype IN ('.implode(',', $escapedZonableTypes).'))';
+		$sql .= ' ORDER BY ee.rowid ASC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return array();
+		}
+
+		$targets = array();
+		while ($obj = $this->db->fetch_object($resql)) {
+			$linkedType = '';
+			$linkedId = 0;
+			if (in_array((string) $obj->sourcetype, $powerPlantTypes, true)) {
+				$linkedType = (string) $obj->targettype;
+				$linkedId = (int) $obj->fk_target;
+			} elseif (in_array((string) $obj->targettype, $powerPlantTypes, true)) {
+				$linkedType = (string) $obj->sourcetype;
+				$linkedId = (int) $obj->fk_source;
+			}
+			if ($linkedType === '' || empty($zonableTypeMap[$linkedType]) || $linkedId <= 0) {
+				continue;
+			}
+
+			$elementType = $zonableTypeMap[$linkedType];
+			if (!$this->fetchSupportedObject($elementType, $linkedId, $entity)) {
+				continue;
+			}
+			$key = $elementType.':'.$linkedId;
+			$targets[$key] = array(
+				'element_type' => $elementType,
+				'fk_element' => $linkedId,
+				'entity' => $entity,
+			);
+		}
+		$this->db->free($resql);
+
+		return array_values($targets);
+	}
+
+	/**
 	 * Apply zone category to object when Dolibarr category API supports the target.
 	 *
 	 * @param string              $elementType Object element type
@@ -1786,21 +1859,139 @@ class LmdbZoningService
 		if ($count <= 0) {
 			return false;
 		}
-		if ($count > 1) {
-			dol_syslog('LmdbZoningService::resolvePowerPlantPriorityForObject multiple linked power plants element_type='.$elementType.' fk_element='.(int) $fkElement.' count='.$count, LOG_INFO);
 
-			return array('result' => $this->buildOutOfZoneResult($elementType, $profileRef, (int) $entity, 'MultipleLinkedPowerPlants'));
+		return array('result' => $this->calculateZoneForLinkedPowerPlants($elementType, $profileRef, (int) $entity, $powerPlants));
+	}
+
+	/**
+	 * Calculate a document zone from the sum of linked PowerPlantPV distances.
+	 *
+	 * @param string            $elementType Object element type
+	 * @param string            $profileRef  Profile ref
+	 * @param int               $entity      Entity id
+	 * @param array<int,object> $powerPlants Linked power plants
+	 * @return array<string,mixed>
+	 */
+	private function calculateZoneForLinkedPowerPlants($elementType, $profileRef, $entity, array $powerPlants)
+	{
+		$profile = $this->fetchProfileByRef($profileRef, (int) $entity);
+		if (!$profile) {
+			return $this->failedResult('ProfileNotFound');
+		}
+		$referencePoint = new LmdbZoningReferencePoint($this->db);
+		if ($referencePoint->fetch((int) $profile->fk_referencepoint) <= 0) {
+			return $this->buildProfileFailedResult($profileRef, (int) $entity, 'ReferencePointNotFound');
+		}
+		if (!$this->geocoder->hasValidCoordinates($referencePoint->getAddressArray())) {
+			return $this->buildProfileFailedResult($profileRef, (int) $entity, 'ReferencePointCoordinatesMissing');
 		}
 
-		$powerPlant = reset($powerPlants);
-		$address = $this->extractAddressFromObject($powerPlant);
-		if ($this->isUsableAddress($address)) {
-			return array('address' => $address);
+		$totalDistance = 0.0;
+		$details = array();
+		$addressRaw = array();
+		$hashParts = array();
+		foreach ($powerPlants as $powerPlant) {
+			if (!is_object($powerPlant) || empty($powerPlant->id)) {
+				continue;
+			}
+			$label = $this->getObjectDetailLabel($powerPlant);
+			$address = $this->extractAddressFromObject($powerPlant);
+			if (!$this->isUsableAddress($address)) {
+				dol_syslog('LmdbZoningService::calculateZoneForLinkedPowerPlants linked power plant address not found element_type='.$elementType.' powerplant_id='.(int) $powerPlant->id, LOG_WARNING);
+				$result = $this->buildProfileFailedResult($profileRef, (int) $entity, 'LinkedPowerPlantAddressNotFound');
+				$result['message'] = 'LinkedPowerPlantAddressNotFound: '.$label;
+				return $result;
+			}
+
+			$geocode = $this->geocoder->geocode($address, (int) $entity, 0);
+			if (empty($geocode['status']) || $geocode['status'] !== LmdbZoningGeocoder::STATUS_OK) {
+				$message = isset($geocode['message']) ? (string) $geocode['message'] : 'GeocodingFailed';
+				dol_syslog('LmdbZoningService::calculateZoneForLinkedPowerPlants geocoding failed element_type='.$elementType.' powerplant_id='.(int) $powerPlant->id.' message='.$message, LOG_WARNING);
+				$result = $this->buildProfileFailedResult($profileRef, (int) $entity, 'LinkedPowerPlantGeocodingFailed');
+				$result['message'] = 'LinkedPowerPlantGeocodingFailed: '.$label.' - '.$message;
+				$result['latitude'] = isset($geocode['latitude']) ? $geocode['latitude'] : null;
+				$result['longitude'] = isset($geocode['longitude']) ? $geocode['longitude'] : null;
+				$result['address_hash'] = isset($geocode['address_hash']) ? $geocode['address_hash'] : '';
+				return $result;
+			}
+
+			$distance = $this->getAirDistanceKm((float) $referencePoint->latitude, (float) $referencePoint->longitude, (float) $geocode['latitude'], (float) $geocode['longitude']);
+			$totalDistance += $distance;
+			$roundedDistance = round($distance, 2);
+			$details[] = array(
+				'id' => (int) $powerPlant->id,
+				'ref' => $label,
+				'label' => $label,
+				'distance_km' => $roundedDistance,
+			);
+			$addressRaw[] = $label.' | '.$this->addressToString($address).' | '.$roundedDistance.' km';
+			$hashParts[] = (int) $powerPlant->id.':'.(isset($geocode['address_hash']) ? $geocode['address_hash'] : '').':'.$distance;
 		}
 
-		dol_syslog('LmdbZoningService::resolvePowerPlantPriorityForObject linked power plant address not found element_type='.$elementType.' fk_element='.(int) $fkElement.' powerplant_id='.(int) $powerPlant->id, LOG_WARNING);
+		if (empty($details)) {
+			return $this->buildProfileFailedResult($profileRef, (int) $entity, 'LinkedPowerPlantAddressNotFound');
+		}
 
-		return array('result' => $this->buildProfileFailedResult($profileRef, (int) $entity, 'LinkedPowerPlantAddressNotFound'));
+		$zone = $this->findZoneForDistance((int) $profile->id, $totalDistance, (int) $entity);
+		$message = $this->buildLinkedPowerPlantDistanceMessage($details, round($totalDistance, 2));
+		if (!$zone) {
+			return array(
+				'status' => 'out_of_range',
+				'profile_ref' => $profile->ref,
+				'fk_profile' => (int) $profile->id,
+				'fk_referencepoint' => (int) $referencePoint->id,
+				'zone_code' => '',
+				'zone_label' => '',
+				'distance_km' => round($totalDistance, 2),
+				'distance_raw_km' => $totalDistance,
+				'fk_zone' => null,
+				'fk_categorie' => null,
+				'latitude' => null,
+				'longitude' => null,
+				'address_hash' => md5(implode('|', $hashParts)),
+				'address_raw' => implode("\n", $addressRaw),
+				'message' => $message,
+			);
+		}
+
+		return array(
+			'status' => 'ok',
+			'profile_ref' => $profile->ref,
+			'fk_profile' => (int) $profile->id,
+			'fk_referencepoint' => (int) $referencePoint->id,
+			'zone_code' => $zone->zone_code,
+			'zone_label' => $zone->label,
+			'distance_km' => round($totalDistance, 2),
+			'distance_raw_km' => $totalDistance,
+			'fk_zone' => (int) $zone->id,
+			'fk_categorie' => $this->getCategoryForElementType($zone, $elementType),
+			'latitude' => null,
+			'longitude' => null,
+			'address_hash' => md5(implode('|', $hashParts)),
+			'address_raw' => implode("\n", $addressRaw),
+			'message' => $message,
+		);
+	}
+
+	/**
+	 * Build the stored detail message for linked power plant distances.
+	 *
+	 * @param array<int,array<string,mixed>> $details Details
+	 * @param float                         $totalKm Total distance
+	 * @return string
+	 */
+	private function buildLinkedPowerPlantDistanceMessage(array $details, $totalKm)
+	{
+		$payload = array(
+			'items' => $details,
+			'total_km' => (float) $totalKm,
+		);
+		$json = json_encode($payload);
+		if (!is_string($json) || $json === '') {
+			return 'LinkedPowerPlantDistances';
+		}
+
+		return 'LinkedPowerPlantDistances|'.$json;
 	}
 
 	/**
@@ -1837,6 +2028,90 @@ class LmdbZoningService
 		}
 
 		return $powerPlants;
+	}
+
+	/**
+	 * Return the linked-object types of PowerPlantPV records.
+	 *
+	 * @return array<int,string>
+	 */
+	private function getPowerPlantLinkedObjectTypes()
+	{
+		return array('powerplantpv_powerplant', 'powerplant@powerplantpv', 'powerplant');
+	}
+
+	/**
+	 * Return linked-object type aliases mapped to canonical thirdparty-address zonable types.
+	 *
+	 * @return array<string,string>
+	 */
+	private function getLinkedThirdpartyZonableTypeMap()
+	{
+		$map = array();
+		$seen = array();
+		foreach (self::getZonableObjectDefinitions(1) as $elementType => $definition) {
+			$canonicalElementType = self::normalizeZonableElementType($elementType);
+			if (isset($seen[$canonicalElementType])) {
+				continue;
+			}
+			$canonicalDefinition = self::getZonableObjectDefinition($canonicalElementType);
+			if (empty($canonicalDefinition['available']) || empty($canonicalDefinition['address_strategy']) || $canonicalDefinition['address_strategy'] !== 'thirdparty') {
+				continue;
+			}
+			$seen[$canonicalElementType] = true;
+			foreach ($this->getLinkedObjectTypeCandidatesForElement($canonicalElementType, $canonicalDefinition) as $linkedType) {
+				$map[$linkedType] = $canonicalElementType;
+			}
+		}
+
+		return $map;
+	}
+
+	/**
+	 * Return element_element type candidates for a supported object type.
+	 *
+	 * @param string              $elementType Object element type
+	 * @param array<string,mixed> $definition  Zonable definition
+	 * @return array<int,string>
+	 */
+	private function getLinkedObjectTypeCandidatesForElement($elementType, array $definition)
+	{
+		$candidates = array($elementType);
+		foreach (array('table_element', 'category_link_type') as $key) {
+			if (!empty($definition[$key])) {
+				$candidates[] = (string) $definition[$key];
+			}
+		}
+		$aliases = array(
+			'propal' => array('propale'),
+			'commande' => array('order'),
+			'facture' => array('invoice'),
+			'contract' => array('contrat'),
+			'fichinter' => array('ficheinter'),
+			'timesheetweek' => array('timesheet_week'),
+		);
+		if (!empty($aliases[$elementType])) {
+			$candidates = array_merge($candidates, $aliases[$elementType]);
+		}
+
+		return array_values(array_unique(array_filter($candidates)));
+	}
+
+	/**
+	 * Return a compact object label for stored distance details.
+	 *
+	 * @param object $object Object
+	 * @return string
+	 */
+	private function getObjectDetailLabel($object)
+	{
+		foreach (array('ref', 'name', 'nom', 'label') as $property) {
+			if (!empty($object->$property)) {
+				return trim(str_replace(array("\r", "\n"), ' ', (string) $object->$property));
+			}
+		}
+
+		return !empty($object->id) ? '#'.((int) $object->id) : '#';
 	}
 
 	/**

@@ -1,4 +1,5 @@
 LmdbZoning=lmdbzoning
+LmdbZoningDistanceComputed=Distance calculée
 LmdbZoningDesc=Calcul de zones géographiques pour objets Dolibarr
 LmdbZoningDescLong=Module externe de calcul, cache et application de zones géographiques avec compatibilité Multicompany.
 Zoning=Zonage
@@ -185,6 +186,8 @@ LmdbZoningRefreshCategoriesDone=Actualisation des catégories : %s traitées, %s
 LmdbZoningTriggerCalculationFailed=Zonage non appliqué pour %s #%s : %s
 ProfileNotFound=Profil de zonage introuvable
 LinkedPowerPlantAddressNotFound=Adresse de la Centrale PV liée introuvable
+LinkedPowerPlantGeocodingFailed=Géocodage de la Centrale PV liée impossible
+LmdbZoningLinkedPowerPlantDistances=Détail par centrale
 MultipleLinkedPowerPlants=Plusieurs Centrales PV liées : hors zone sur devis
 OutOfZoneNotFound=Zone hors zone introuvable
 ShareLmdbzoning_referencepoint=Partager les points de référence

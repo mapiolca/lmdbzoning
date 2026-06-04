@@ -326,12 +326,11 @@ class ActionsLmdbZoning
 
 		$langs->load('lmdbzoning@lmdbzoning');
 		$out = '';
-		if (!empty($result)) {
-			$out .= '<tr class="lmdbzoning-object-block"><td class="titlefield">'.$langs->trans('LmdbZoning').'</td><td>';
-			$out .= dol_escape_htmltag($result['zone_code']).' - '.price($result['distance_km']).' '.$langs->trans('km');
-			if (!empty($result['manual_override'])) {
-				$out .= ' '.img_picto($langs->trans('ManualOverride'), 'warning');
-			}
+		if (!empty($result) && array_key_exists('distance_km', $result) && $result['distance_km'] !== null && $result['distance_km'] !== '') {
+			$tooltip = $this->formatDistanceComputedTooltip($result);
+			$title = $tooltip !== '' ? ' title="'.dol_escape_htmltag($tooltip).'"' : '';
+			$out .= '<tr class="lmdbzoning-object-block"><td class="titlefield">'.$langs->trans('LmdbZoningDistanceComputed').'</td><td>';
+			$out .= '<span'.$title.'>'.price((float) $result['distance_km']).' '.$langs->trans('km').'</span>';
 			$out .= '</td></tr>';
 		}
 		if ($out === '') {
@@ -340,6 +339,49 @@ class ActionsLmdbZoning
 		$this->resprints = $out;
 
 		return 0;
+	}
+
+	/**
+	 * Format computed distance tooltip from stored calculation details.
+	 *
+	 * @param array<string,mixed> $result Stored zoning result
+	 * @return string
+	 */
+	private function formatDistanceComputedTooltip(array $result)
+	{
+		global $langs;
+
+		$message = '';
+		if (!empty($result['calculation_message'])) {
+			$message = (string) $result['calculation_message'];
+		} elseif (!empty($result['message'])) {
+			$message = (string) $result['message'];
+		}
+		$prefix = 'LinkedPowerPlantDistances|';
+		if ($message === '' || strpos($message, $prefix) !== 0) {
+			return '';
+		}
+
+		$payload = json_decode(substr($message, strlen($prefix)), true);
+		if (!is_array($payload)) {
+			return '';
+		}
+
+		$lines = array($langs->trans('LmdbZoningLinkedPowerPlantDistances'));
+		if (!empty($payload['items']) && is_array($payload['items'])) {
+			foreach ($payload['items'] as $item) {
+				if (!is_array($item) || !isset($item['distance_km'])) {
+					continue;
+				}
+				$label = !empty($item['label']) ? (string) $item['label'] : (!empty($item['ref']) ? (string) $item['ref'] : '#'.(!empty($item['id']) ? (int) $item['id'] : ''));
+				$lines[] = $label.' : '.price((float) $item['distance_km']).' '.$langs->trans('km');
+			}
+		}
+		if (isset($payload['total_km'])) {
+			$lines[] = $langs->trans('Total').' : '.price((float) $payload['total_km']).' '.$langs->trans('km');
+		}
+
+		return implode("\n", $lines);
 	}
 
 	/**

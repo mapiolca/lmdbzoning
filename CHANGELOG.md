@@ -6,6 +6,7 @@
 - Correction de l'affichage des catégories dans la fiche contrat, juste après la date, et suppression d'un warning PHP 8.2 sur les hooks.
 - Alignement de l'affichage des catégories contrat sur le rendu natif des devis, commandes et factures.
 - Synchronisation des catégories de zonage des centrales `powerplantpv` via les triggers `POWERPLANTPV_POWERPLANT_CREATE` et `POWERPLANTPV_POWERPLANT_MODIFY`, avec liaison native `categorie_powerplant`.
+- Affichage de la distance calculée seule sur les fiches zonées et agrégation des distances des centrales liées pour catégoriser les documents.
 
 ## 1.0.0 - 2026-06-03
 
