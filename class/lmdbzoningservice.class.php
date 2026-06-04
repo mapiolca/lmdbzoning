@@ -311,7 +311,23 @@ class LmdbZoningService
 			return $result;
 		}
 		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
-		$address = $this->fetchObjectAddress($elementType, (int) $fkElement, $entity);
+		$powerPlantPriority = $this->resolvePowerPlantPriorityForObject($elementType, (int) $fkElement, $profileRef, $entity);
+		if (is_array($powerPlantPriority) && isset($powerPlantPriority['result']) && is_array($powerPlantPriority['result'])) {
+			$result = $powerPlantPriority['result'];
+			$result['entity'] = $entity;
+			$result['element_type'] = $elementType;
+			$result['fk_element'] = (int) $fkElement;
+			$this->storeObjectZoneResult($elementType, (int) $fkElement, $result, $entity);
+			if (empty($skipApplyCategory) && $result['status'] === 'ok' && (!empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY) || !empty($forceApplyCategory))) {
+				$this->applyZoneCategoryToObject($elementType, (int) $fkElement, $result);
+			}
+			$this->logEvent('LMDBZONING_OBJECT_CALCULATE', $elementType, (int) $fkElement, isset($result['message']) ? $result['message'] : '', $result);
+
+			return $result;
+		}
+		$address = is_array($powerPlantPriority) && isset($powerPlantPriority['address']) && is_array($powerPlantPriority['address'])
+			? $powerPlantPriority['address']
+			: $this->fetchObjectAddress($elementType, (int) $fkElement, $entity);
 		if (!$address) {
 			$result = $this->failedResult('ObjectAddressNotFound');
 			$result['element_type'] = $elementType;
@@ -1349,6 +1365,43 @@ class LmdbZoningService
 	}
 
 	/**
+	 * Find the fallback out-of-zone profile zone.
+	 *
+	 * @param int $profileId Profile id
+	 * @param int $entity    Entity id
+	 * @return LmdbZoningProfileZone|false
+	 */
+	private function findOutOfZone($profileId, $entity)
+	{
+		$zone = $this->fetchZoneByCode((int) $profileId, 'ZONE_OUT', (int) $entity);
+		if ($zone && (!isset($zone->active) || !empty($zone->active))) {
+			return $zone;
+		}
+
+		$sql = 'SELECT rowid FROM '.MAIN_DB_PREFIX.'lmdbzoning_profile_zone';
+		$sql .= ' WHERE entity IN ('.$this->getEntityFilter('lmdbzoning_zone', (int) $entity).')';
+		$sql .= ' AND fk_profile = '.((int) $profileId);
+		$sql .= ' AND active = 1';
+		$sql .= ' AND distance_max IS NULL';
+		$sql .= ' ORDER BY priority DESC, rowid ASC';
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return false;
+		}
+		$obj = $this->db->fetch_object($resql);
+		if (!$obj) {
+			return false;
+		}
+		$zone = new LmdbZoningProfileZone($this->db);
+		if ($zone->fetch((int) $obj->rowid) <= 0) {
+			return false;
+		}
+
+		return $zone;
+	}
+
+	/**
 	 * Fetch zone by code.
 	 *
 	 * @param int    $profileId Profile id
@@ -1498,6 +1551,146 @@ class LmdbZoningService
 		}
 
 		return false;
+	}
+
+	/**
+	 * Resolve linked PowerPlantPV priority before thirdparty fallback.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $fkElement   Object id
+	 * @param string $profileRef  Profile ref
+	 * @param int    $entity      Entity id
+	 * @return array<string,mixed>|false
+	 */
+	private function resolvePowerPlantPriorityForObject($elementType, $fkElement, $profileRef, $entity)
+	{
+		$definition = self::getZonableObjectDefinition($elementType);
+		$strategy = !empty($definition['address_strategy']) ? (string) $definition['address_strategy'] : 'self_then_thirdparty';
+		if ($strategy !== 'thirdparty') {
+			return false;
+		}
+
+		$object = $this->fetchSupportedObject($elementType, (int) $fkElement, (int) $entity);
+		if (!$object) {
+			return false;
+		}
+
+		$powerPlants = $this->fetchLinkedPowerPlantsForObject($object, (int) $entity);
+		$count = count($powerPlants);
+		if ($count <= 0) {
+			return false;
+		}
+		if ($count > 1) {
+			dol_syslog('LmdbZoningService::resolvePowerPlantPriorityForObject multiple linked power plants element_type='.$elementType.' fk_element='.(int) $fkElement.' count='.$count, LOG_INFO);
+
+			return array('result' => $this->buildOutOfZoneResult($elementType, $profileRef, (int) $entity, 'MultipleLinkedPowerPlants'));
+		}
+
+		$powerPlant = reset($powerPlants);
+		$address = $this->extractAddressFromObject($powerPlant);
+		if ($this->isUsableAddress($address)) {
+			return array('address' => $address);
+		}
+
+		dol_syslog('LmdbZoningService::resolvePowerPlantPriorityForObject linked power plant address not found element_type='.$elementType.' fk_element='.(int) $fkElement.' powerplant_id='.(int) $powerPlant->id, LOG_WARNING);
+
+		return array('result' => $this->buildProfileFailedResult($profileRef, (int) $entity, 'LinkedPowerPlantAddressNotFound'));
+	}
+
+	/**
+	 * Fetch linked PowerPlantPV objects visible in the current entity scope.
+	 *
+	 * @param object $object Dolibarr object
+	 * @param int    $entity Entity id
+	 * @return array<int,object>
+	 */
+	private function fetchLinkedPowerPlantsForObject($object, $entity)
+	{
+		if (!function_exists('isModEnabled') || !isModEnabled('powerplantpv')) {
+			return array();
+		}
+		dol_include_once('/powerplantpv/lib/powerplantpv.lib.php');
+		if (!function_exists('powerplantpvGetLinkedPowerPlants')) {
+			return array();
+		}
+
+		$linkedPowerPlants = powerplantpvGetLinkedPowerPlants($object);
+		if (!is_array($linkedPowerPlants) || empty($linkedPowerPlants)) {
+			return array();
+		}
+
+		$powerPlants = array();
+		foreach ($linkedPowerPlants as $powerPlant) {
+			if (!is_object($powerPlant) || empty($powerPlant->id)) {
+				continue;
+			}
+			if (!$this->isObjectInEntityScope($powerPlant, 'powerplantpv_powerplant', (int) $entity)) {
+				continue;
+			}
+			$powerPlants[(int) $powerPlant->id] = $powerPlant;
+		}
+
+		return $powerPlants;
+	}
+
+	/**
+	 * Build a stored out-of-zone result for objects linked to multiple PowerPlantPV records.
+	 *
+	 * @param string $elementType Object element type
+	 * @param string $profileRef  Profile ref
+	 * @param int    $entity      Entity id
+	 * @param string $message     Technical message
+	 * @return array<string,mixed>
+	 */
+	private function buildOutOfZoneResult($elementType, $profileRef, $entity, $message)
+	{
+		$profile = $this->fetchProfileByRef($profileRef, (int) $entity);
+		if (!$profile) {
+			return $this->failedResult('ProfileNotFound');
+		}
+		$zone = $this->findOutOfZone((int) $profile->id, (int) $entity);
+		if (!$zone) {
+			return $this->buildProfileFailedResult($profileRef, (int) $entity, 'OutOfZoneNotFound');
+		}
+
+		return array(
+			'status' => 'ok',
+			'profile_ref' => $profile->ref,
+			'fk_profile' => (int) $profile->id,
+			'fk_referencepoint' => (int) $profile->fk_referencepoint,
+			'zone_code' => $zone->zone_code,
+			'zone_label' => $zone->label,
+			'distance_km' => null,
+			'distance_raw_km' => null,
+			'fk_zone' => (int) $zone->id,
+			'fk_categorie' => $this->getCategoryForElementType($zone, $elementType),
+			'latitude' => null,
+			'longitude' => null,
+			'address_hash' => '',
+			'address_raw' => '',
+			'message' => $message,
+		);
+	}
+
+	/**
+	 * Build a failed result with profile metadata when available.
+	 *
+	 * @param string $profileRef Profile ref
+	 * @param int    $entity     Entity id
+	 * @param string $message    Technical message
+	 * @return array<string,mixed>
+	 */
+	private function buildProfileFailedResult($profileRef, $entity, $message)
+	{
+		$result = $this->failedResult($message);
+		$profile = $this->fetchProfileByRef($profileRef, (int) $entity);
+		if ($profile) {
+			$result['profile_ref'] = $profile->ref;
+			$result['fk_profile'] = (int) $profile->id;
+			$result['fk_referencepoint'] = (int) $profile->fk_referencepoint;
+		}
+
+		return $result;
 	}
 
 	/**
