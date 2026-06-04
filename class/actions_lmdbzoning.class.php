@@ -262,7 +262,7 @@ class ActionsLmdbZoning
 	 */
 	public function formConfirm($parameters, &$object, &$action, $hookmanager)
 	{
-		global $user;
+		global $langs, $user;
 
 		if (!$this->isLmdbZoningEnabled()) {
 			return 0;
@@ -279,9 +279,10 @@ class ActionsLmdbZoning
 			return 0;
 		}
 
+		$langs->load('lmdbzoning@lmdbzoning');
 		dol_include_once('/lmdbzoning/class/lmdbzoningservice.class.php');
 		$service = new LmdbZoningService($this->db);
-		$this->resprints = $this->renderContractCategoriesBlock($service, $object, $this->getObjectEntity($object), $this->canWriteContractCategories($user));
+		$this->resprints = $this->renderContractCategoriesInlineRow($service, $object, $this->getObjectEntity($object), $this->canWriteContractCategories($user));
 
 		return 0;
 	}
@@ -339,7 +340,7 @@ class ActionsLmdbZoning
 	}
 
 	/**
-	 * Render contract categories block.
+	 * Render contract categories row with a JavaScript move into the contract card table.
 	 *
 	 * @param LmdbZoningService $service  Zoning service
 	 * @param object            $object   Contract object
@@ -347,7 +348,7 @@ class ActionsLmdbZoning
 	 * @param bool              $canWrite Can write categories
 	 * @return string
 	 */
-	private function renderContractCategoriesBlock($service, $object, $entity, $canWrite)
+	private function renderContractCategoriesInlineRow($service, $object, $entity, $canWrite)
 	{
 		global $langs;
 
@@ -366,20 +367,49 @@ class ActionsLmdbZoning
 			}
 		}
 
-		$out = '<div class="fichecenter lmdbzoning-contract-categories-block">';
-		$out .= '<div class="underbanner clearboth"></div>';
-		$out .= '<table class="border tableforfield centpercent">';
-		$out .= '<tr class="lmdbzoning-contract-categories"><td class="titlefield">'.$langs->trans('ContractCategories').'</td><td>';
-		if (empty($options) && empty($selectedCategories)) {
-			$out .= '<span class="opacitymedium">'.$langs->trans('NoContractCategoryAvailable').'</span>';
-		} elseif ($canWrite && !empty($options)) {
-			$out .= '<form method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'">';
+		$formId = 'lmdbzoning-contract-categories-form-'.((int) $id);
+		$stagingId = 'lmdbzoning-contract-categories-staging-'.((int) $id);
+		$rowId = 'lmdbzoning-contract-categories-row-'.((int) $id);
+		$selectId = 'lmdbzoning_contract_categories_'.((int) $id);
+
+		$out = '';
+		if ($canWrite && !empty($options)) {
+			$out .= '<form id="'.dol_escape_htmltag($formId).'" method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" style="display:none">';
 			$out .= '<input type="hidden" name="token" value="'.dol_escape_htmltag($this->getNewToken()).'">';
 			$out .= '<input type="hidden" name="action" value="updatelmdbzoningcontractcategories">';
 			$out .= '<input type="hidden" name="id" value="'.((int) $id).'">';
-			$out .= $this->renderMultiSelect('lmdbzoning_contract_categories', $options, $selectedCategories);
-			$out .= ' <input type="submit" class="button small" value="'.dol_escape_htmltag($langs->trans('Save')).'">';
 			$out .= '</form>';
+		}
+		$out .= '<div id="'.dol_escape_htmltag($stagingId).'" class="lmdbzoning-contract-categories-fallback" style="position:absolute;left:-10000px;top:-10000px;visibility:hidden">';
+		$out .= '<table class="border tableforfield centpercent">';
+		$out .= $this->renderContractCategoriesRow($rowId, $formId, $selectId, $options, $selectedCategories, $canWrite);
+		$out .= '</table></div>';
+		$out .= $this->renderContractCategoriesPlacementScript($stagingId, $rowId, $selectId);
+
+		return $out;
+	}
+
+	/**
+	 * Render contract categories table row.
+	 *
+	 * @param string            $rowId              Row HTML id
+	 * @param string            $formId             Form HTML id
+	 * @param string            $selectId           Select HTML id
+	 * @param array<int,string> $options            Category options
+	 * @param array<int,int>    $selectedCategories Selected category ids
+	 * @param bool              $canWrite           Can write categories
+	 * @return string
+	 */
+	private function renderContractCategoriesRow($rowId, $formId, $selectId, array $options, array $selectedCategories, $canWrite)
+	{
+		global $langs;
+
+		$out = '<tr id="'.dol_escape_htmltag($rowId).'" class="lmdbzoning-contract-categories"><td class="titlefield">'.$langs->trans('ContractCategories').'</td><td>';
+		if (empty($options) && empty($selectedCategories)) {
+			$out .= '<span class="opacitymedium">'.$langs->trans('NoContractCategoryAvailable').'</span>';
+		} elseif ($canWrite && !empty($options)) {
+			$out .= $this->renderMultiSelect('lmdbzoning_contract_categories', $options, $selectedCategories, $selectId, $formId);
+			$out .= ' <input type="submit" class="button small" form="'.dol_escape_htmltag($formId).'" value="'.dol_escape_htmltag($langs->trans('Save')).'">';
 		} else {
 			$labels = array();
 			foreach ($selectedCategories as $categoryId) {
@@ -389,9 +419,63 @@ class ActionsLmdbZoning
 			}
 			$out .= !empty($labels) ? implode(', ', $labels) : $langs->trans('NoRecordFound');
 		}
-		$out .= '</td></tr></table></div><br>';
+		$out .= '</td></tr>';
 
 		return $out;
+	}
+
+	/**
+	 * Render JavaScript that moves the staged row after the contract date line.
+	 *
+	 * @param string $stagingId Staging block id
+	 * @param string $rowId     Row id
+	 * @param string $selectId  Select id
+	 * @return string
+	 */
+	private function renderContractCategoriesPlacementScript($stagingId, $rowId, $selectId)
+	{
+		global $langs;
+
+		$stagingIdJs = json_encode($stagingId);
+		$rowIdJs = json_encode($rowId);
+		$selectIdJs = json_encode($selectId);
+		$dateLabelJs = json_encode($langs->trans('Date'));
+
+		$script = "(function() {\n";
+		$script .= "\tfunction placeContractCategories() {\n";
+		$script .= "\t\tvar staging = document.getElementById(".$stagingIdJs.");\n";
+		$script .= "\t\tvar row = document.getElementById(".$rowIdJs.");\n";
+		$script .= "\t\tif (!staging || !row) { return; }\n";
+		$script .= "\t\tvar dateInput = document.getElementById('date_contrat');\n";
+		$script .= "\t\tvar dateRow = dateInput ? dateInput.closest('tr') : null;\n";
+		$script .= "\t\tif (!dateRow) {\n";
+		$script .= "\t\t\tvar tables = document.querySelectorAll('table.tableforfield');\n";
+		$script .= "\t\t\tfor (var i = 0; i < tables.length && !dateRow; i++) {\n";
+		$script .= "\t\t\t\tvar rows = tables[i].querySelectorAll('tr');\n";
+		$script .= "\t\t\t\tfor (var j = 0; j < rows.length; j++) {\n";
+		$script .= "\t\t\t\t\tif (rows[j].querySelector('[name=\"date_contrat\"], [id=\"date_contrat\"]')) { dateRow = rows[j]; break; }\n";
+		$script .= "\t\t\t\t\tvar firstCell = rows[j].querySelector('td');\n";
+		$script .= "\t\t\t\t\tvar firstCellText = firstCell ? firstCell.textContent.replace(/\\s+/g, ' ').trim() : '';\n";
+		$script .= "\t\t\t\t\tif (firstCellText === ".$dateLabelJs.") { dateRow = rows[j]; break; }\n";
+		$script .= "\t\t\t\t}\n";
+		$script .= "\t\t\t}\n";
+		$script .= "\t\t}\n";
+		$script .= "\t\tif (dateRow && dateRow.parentNode) {\n";
+		$script .= "\t\t\tdateRow.parentNode.insertBefore(row, dateRow.nextSibling);\n";
+		$script .= "\t\t\tstaging.parentNode.removeChild(staging);\n";
+		$script .= "\t\t\tvar select = document.getElementById(".$selectIdJs.");\n";
+		$script .= "\t\t\tif (select && window.jQuery) { window.jQuery(select).trigger('change'); }\n";
+		$script .= "\t\t} else {\n";
+		$script .= "\t\t\tstaging.style.position = '';\n";
+		$script .= "\t\t\tstaging.style.left = '';\n";
+		$script .= "\t\t\tstaging.style.top = '';\n";
+		$script .= "\t\t\tstaging.style.visibility = '';\n";
+		$script .= "\t\t}\n";
+		$script .= "\t}\n";
+		$script .= "\tif (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', placeContractCategories); } else { placeContractCategories(); }\n";
+		$script .= "})();";
+
+		return '<script>'.$script.'</script>';
 	}
 
 	/**
@@ -400,19 +484,22 @@ class ActionsLmdbZoning
 	 * @param string            $htmlName HTML field name
 	 * @param array<int,string> $options  Options
 	 * @param array<int,int>    $selected Selected values
+	 * @param string            $htmlId   HTML id
+	 * @param string            $formId   Form HTML id
 	 * @return string
 	 */
-	private function renderMultiSelect($htmlName, array $options, array $selected)
+	private function renderMultiSelect($htmlName, array $options, array $selected, $htmlId = '', $formId = '')
 	{
-		global $form;
-
 		$selected = array_map('intval', $selected);
-		if (is_object($form) && method_exists($form, 'multiselectarray')) {
-			return $form->multiselectarray($htmlName, $options, $selected, 0, 0, 'flat minwidth300', 0, 0, '', '');
+		if ($htmlId === '') {
+			$htmlId = preg_replace('/[^a-zA-Z0-9_]/', '_', $htmlName);
 		}
 
-		$htmlId = preg_replace('/[^a-zA-Z0-9_]/', '_', $htmlName);
-		$out = '<select id="'.dol_escape_htmltag($htmlId).'" name="'.dol_escape_htmltag($htmlName).'[]" class="flat minwidth300" multiple="multiple">';
+		$out = '<select id="'.dol_escape_htmltag($htmlId).'" name="'.dol_escape_htmltag($htmlName).'[]" class="flat minwidth300" multiple="multiple"';
+		if ($formId !== '') {
+			$out .= ' form="'.dol_escape_htmltag($formId).'"';
+		}
+		$out .= '>';
 		foreach ($options as $key => $label) {
 			$out .= '<option value="'.((int) $key).'"'.(in_array((int) $key, $selected, true) ? ' selected' : '').'>'.dol_escape_htmltag($label).'</option>';
 		}

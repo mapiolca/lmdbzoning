@@ -3,7 +3,7 @@
 ## Unreleased
 
 - Ajout d'un multiselect de catégories contrat sur la fiche contrat via hook, avec conservation des catégories issues du zonage.
-- Correction de l'affichage du bloc catégories sur les fiches contrat existantes et suppression d'un warning PHP 8.2 sur les hooks.
+- Correction de l'affichage des catégories dans la fiche contrat, juste après la date, et suppression d'un warning PHP 8.2 sur les hooks.
 
 ## 1.0.0 - 2026-06-03
 
