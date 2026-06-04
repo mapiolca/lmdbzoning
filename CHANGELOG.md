@@ -7,6 +7,7 @@
 - Alignement de l'affichage des catégories contrat sur le rendu natif des devis, commandes et factures.
 - Synchronisation des catégories de zonage des centrales `powerplantpv` via les triggers `POWERPLANTPV_POWERPLANT_CREATE` et `POWERPLANTPV_POWERPLANT_MODIFY`, avec liaison native `categorie_powerplant`.
 - Affichage de la distance calculée seule sur les fiches zonées et agrégation des distances des centrales liées pour catégoriser les documents.
+- Retrait de l'entrée `Paramètres` du menu gauche, les réglages restant accessibles depuis la gestion des modules.
 
 ## 1.0.0 - 2026-06-03
 

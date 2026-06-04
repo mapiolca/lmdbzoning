@@ -36,7 +36,7 @@ class modLmdbZoning extends DolibarrModules
 		$this->depends = array();
 		$this->requiredby = array();
 		$this->conflictwith = array();
-		$this->config_page_url = array('setup.php@lmdbzoning');
+		$this->config_page_url = array('setup.php@lmdbzoning', 'compatibility.php@lmdbzoning');
 		$this->hidden = false;
 		$this->dirs = array('/lmdbzoning/temp');
 
@@ -133,7 +133,6 @@ class modLmdbZoning extends DolibarrModules
 		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=tools,fk_leftmenu=lmdbzoning', 'type' => 'left', 'titre' => 'ObjectZoneResults', 'mainmenu' => 'tools', 'leftmenu' => 'objectzones', 'url' => '/lmdbzoning/objectzone_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1030, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
 		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=tools,fk_leftmenu=lmdbzoning', 'type' => 'left', 'titre' => 'GeocodeCache', 'mainmenu' => 'tools', 'leftmenu' => 'cache', 'url' => '/lmdbzoning/geocode_cache_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1040, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
 		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=tools,fk_leftmenu=lmdbzoning', 'type' => 'left', 'titre' => 'CalculationLog', 'mainmenu' => 'tools', 'leftmenu' => 'logs', 'url' => '/lmdbzoning/calculation_log_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1050, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2);
-		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=tools,fk_leftmenu=lmdbzoning', 'type' => 'left', 'titre' => 'Settings', 'mainmenu' => 'tools', 'leftmenu' => 'settings', 'url' => '/lmdbzoning/admin/setup.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1060, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "admin")', 'target' => '', 'user' => 2);
 
 		$this->cronjobs = array(
 			0 => array(
