@@ -209,7 +209,7 @@ class ActionsLmdbZoning
 	{
 		global $langs, $user;
 
-		if ($action !== 'updatelmdbzoningcontractcategories') {
+		if (!in_array($action, array('settags', 'updatelmdbzoningcontractcategories'), true)) {
 			return 0;
 		}
 		if (!$this->isLmdbZoningEnabled()) {
@@ -230,7 +230,10 @@ class ActionsLmdbZoning
 		}
 
 		$this->checkPostToken();
-		$selectedCategories = GETPOST('lmdbzoning_contract_categories', 'array');
+		$selectedCategories = GETPOST('categories', 'array');
+		if (!is_array($selectedCategories)) {
+			$selectedCategories = GETPOST('lmdbzoning_contract_categories', 'array');
+		}
 		if (!is_array($selectedCategories)) {
 			$selectedCategories = array();
 		}
@@ -282,7 +285,7 @@ class ActionsLmdbZoning
 		$langs->load('lmdbzoning@lmdbzoning');
 		dol_include_once('/lmdbzoning/class/lmdbzoningservice.class.php');
 		$service = new LmdbZoningService($this->db);
-		$this->resprints = $this->renderContractCategoriesInlineRow($service, $object, $this->getObjectEntity($object), $this->canWriteContractCategories($user));
+		$this->resprints = $this->renderContractCategoriesInlineRow($service, $object, $this->getObjectEntity($object), $this->canWriteContractCategories($user), $action);
 
 		return 0;
 	}
@@ -346,9 +349,10 @@ class ActionsLmdbZoning
 	 * @param object            $object   Contract object
 	 * @param int               $entity   Entity id
 	 * @param bool              $canWrite Can write categories
+	 * @param string            $action   Current action
 	 * @return string
 	 */
-	private function renderContractCategoriesInlineRow($service, $object, $entity, $canWrite)
+	private function renderContractCategoriesInlineRow($service, $object, $entity, $canWrite, $action)
 	{
 		global $langs;
 
@@ -373,16 +377,17 @@ class ActionsLmdbZoning
 		$selectId = 'lmdbzoning_contract_categories_'.((int) $id);
 
 		$out = '';
-		if ($canWrite && !empty($options)) {
+		$isEditMode = ($action === 'edittags' && $canWrite);
+		if ($isEditMode && !empty($options)) {
 			$out .= '<form id="'.dol_escape_htmltag($formId).'" method="POST" action="'.dol_escape_htmltag($_SERVER['PHP_SELF']).'" style="display:none">';
 			$out .= '<input type="hidden" name="token" value="'.dol_escape_htmltag($this->getNewToken()).'">';
-			$out .= '<input type="hidden" name="action" value="updatelmdbzoningcontractcategories">';
+			$out .= '<input type="hidden" name="action" value="settags">';
 			$out .= '<input type="hidden" name="id" value="'.((int) $id).'">';
 			$out .= '</form>';
 		}
 		$out .= '<div id="'.dol_escape_htmltag($stagingId).'" class="lmdbzoning-contract-categories-fallback" style="position:absolute;left:-10000px;top:-10000px;visibility:hidden">';
 		$out .= '<table class="border tableforfield centpercent">';
-		$out .= $this->renderContractCategoriesRow($rowId, $formId, $selectId, $options, $selectedCategories, $canWrite);
+		$out .= $this->renderContractCategoriesRow($rowId, $formId, $selectId, $options, $selectedCategories, $canWrite, $isEditMode, $object);
 		$out .= '</table></div>';
 		$out .= $this->renderContractCategoriesPlacementScript($stagingId, $rowId, $selectId);
 
@@ -398,27 +403,39 @@ class ActionsLmdbZoning
 	 * @param array<int,string> $options            Category options
 	 * @param array<int,int>    $selectedCategories Selected category ids
 	 * @param bool              $canWrite           Can write categories
+	 * @param bool              $isEditMode         Edit mode
+	 * @param object            $object             Contract object
 	 * @return string
 	 */
-	private function renderContractCategoriesRow($rowId, $formId, $selectId, array $options, array $selectedCategories, $canWrite)
+	private function renderContractCategoriesRow($rowId, $formId, $selectId, array $options, array $selectedCategories, $canWrite, $isEditMode, $object)
 	{
 		global $langs;
 
-		$out = '<tr id="'.dol_escape_htmltag($rowId).'" class="lmdbzoning-contract-categories"><td class="titlefield">'.$langs->trans('ContractCategories').'</td><td>';
-		if (empty($options) && empty($selectedCategories)) {
-			$out .= '<span class="opacitymedium">'.$langs->trans('NoContractCategoryAvailable').'</span>';
-		} elseif ($canWrite && !empty($options)) {
-			$out .= $this->renderMultiSelect('lmdbzoning_contract_categories', $options, $selectedCategories, $selectId, $formId);
-			$out .= ' <input type="submit" class="button small" form="'.dol_escape_htmltag($formId).'" value="'.dol_escape_htmltag($langs->trans('Save')).'">';
+		$out = '<tr id="'.dol_escape_htmltag($rowId).'" class="lmdbzoning-contract-categories"><td>';
+		$out .= '<table class="nobordernopadding centpercent"><tr><td>';
+		$out .= $langs->trans('Categories');
+		$out .= '</td><td class="right">';
+		if ($canWrite && !$isEditMode) {
+			$editUrl = $_SERVER['PHP_SELF'].'?id='.$this->getObjectId($object).'&action=edittags&token='.$this->getNewToken();
+			$out .= '<a class="editfielda" href="'.dol_escape_htmltag($editUrl).'">'.img_edit().'</a>';
 		} else {
-			$labels = array();
-			foreach ($selectedCategories as $categoryId) {
-				if (isset($options[(int) $categoryId])) {
-					$labels[] = dol_escape_htmltag($options[(int) $categoryId]);
-				}
-			}
-			$out .= !empty($labels) ? implode(', ', $labels) : $langs->trans('NoRecordFound');
+			$out .= '&nbsp;';
 		}
+		$out .= '</td></tr></table>';
+		$out .= '</td><td>';
+
+		if ($isEditMode) {
+			if (empty($options) && empty($selectedCategories)) {
+				$out .= '<span class="opacitymedium">'.$langs->trans('NoContractCategoryAvailable').'</span>';
+			} elseif (!empty($options)) {
+				$out .= $this->renderMultiSelect('categories', $options, $selectedCategories, $selectId, $formId);
+				$out .= ' <input type="submit" class="button valignmiddle smallpaddingimp" form="'.dol_escape_htmltag($formId).'" value="'.dol_escape_htmltag($langs->trans('Modify')).'">';
+			}
+		} else {
+			$form = $this->getFormHelper();
+			$out .= is_object($form) ? $form->showCategories($this->getObjectId($object), 'contract', 1) : '';
+		}
+
 		$out .= '</td></tr>';
 
 		return $out;
@@ -651,6 +668,28 @@ class ActionsLmdbZoning
 		}
 
 		return !empty($_SESSION['newtoken']) ? (string) $_SESSION['newtoken'] : '';
+	}
+
+	/**
+	 * Return a Dolibarr Form helper.
+	 *
+	 * @return Form|null
+	 */
+	private function getFormHelper()
+	{
+		global $form;
+
+		if (is_object($form)) {
+			return $form;
+		}
+		if (!class_exists('Form') && defined('DOL_DOCUMENT_ROOT')) {
+			require_once DOL_DOCUMENT_ROOT.'/core/class/html.form.class.php';
+		}
+		if (class_exists('Form')) {
+			return new Form($this->db);
+		}
+
+		return null;
 	}
 
 	/**
