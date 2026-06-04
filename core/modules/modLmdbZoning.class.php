@@ -20,7 +20,7 @@ class modLmdbZoning extends DolibarrModules
 		$this->db = $db;
 		$this->numero = 450022;
 		$this->rights_class = 'lmdbzoning';
-		$this->family = 'technic';
+		$this->family = 'Les Métiers du Bâtiment';
 		$this->module_position = 500;
 		$this->name = preg_replace('/^mod/i', '', get_class($this));
 		$this->description = 'LmdbZoningDesc';
