@@ -501,9 +501,6 @@ class LmdbZoningService
 	public function applyZoneCategoryToObject($elementType, $fkElement, array $zoneResult)
 	{
 		$elementType = self::normalizeZonableElementType($elementType);
-		if (empty($zoneResult['fk_categorie'])) {
-			return 0;
-		}
 		if (!class_exists('Categorie')) {
 			require_once DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php';
 		}
@@ -526,6 +523,13 @@ class LmdbZoningService
 			dol_syslog(__METHOD__.' category link table missing linkType='.$linkType.' elementType='.$elementType, LOG_WARNING);
 			return 0;
 		}
+		$this->removeKnownZoneCategories($object, $elementType, $linkType, (int) $fkElement, $zoneResult);
+
+		if (empty($zoneResult['fk_categorie'])) {
+			$this->logEvent('LMDBZONING_CATEGORY_APPLY', $elementType, (int) $fkElement, 'No category to apply after cleanup', $zoneResult);
+			return 1;
+		}
+
 		$category = new Categorie($this->db);
 		if ($category->fetch((int) $zoneResult['fk_categorie']) <= 0) {
 			return -1;
@@ -534,7 +538,6 @@ class LmdbZoningService
 			$this->error = 'CategoryEntityMismatch';
 			return -1;
 		}
-		$this->removeKnownZoneCategories($object, $elementType, $linkType, (int) $fkElement, $zoneResult);
 		$result = $this->addCategoryLinkToObject($object, $elementType, $linkType, (int) $fkElement, (int) $zoneResult['fk_categorie']);
 		$this->logEvent('LMDBZONING_CATEGORY_APPLY', $elementType, (int) $fkElement, '', $zoneResult);
 
@@ -561,12 +564,12 @@ class LmdbZoningService
 			$this->error = 'ObjectZoneNotFound';
 			return -1;
 		}
-		if (empty($storedZone['calculation_status']) || $storedZone['calculation_status'] !== 'ok' || empty($storedZone['fk_categorie'])) {
+		if (empty($storedZone['fk_profile'])) {
 			return 0;
 		}
 
 		$zoneResult = $storedZone;
-		$zoneResult['status'] = $storedZone['calculation_status'];
+		$zoneResult['status'] = !empty($storedZone['calculation_status']) ? $storedZone['calculation_status'] : '';
 		$zoneResult['message'] = isset($storedZone['calculation_message']) ? $storedZone['calculation_message'] : '';
 		$zoneResult['entity'] = $entity;
 		$zoneResult['profile_ref'] = $profileRef;
@@ -2617,7 +2620,7 @@ class LmdbZoningService
 	 */
 	private function removeKnownZoneCategories($object, $elementType, $linkType, $fkElement, array $zoneResult)
 	{
-		if (empty($zoneResult['fk_profile']) || !class_exists('Categorie')) {
+		if (empty($zoneResult['fk_profile'])) {
 			return;
 		}
 		if (!$this->categoryLinkTableExists($elementType, $linkType)) {
@@ -2627,6 +2630,7 @@ class LmdbZoningService
 		if (empty($categoryFields)) {
 			return;
 		}
+		$categoryToKeep = !empty($zoneResult['fk_categorie']) ? (int) $zoneResult['fk_categorie'] : 0;
 		$sql = 'SELECT '.implode(', ', $categoryFields);
 		$sql .= ' FROM '.MAIN_DB_PREFIX.'lmdbzoning_profile_zone';
 		$sql .= ' WHERE fk_profile = '.((int) $zoneResult['fk_profile']);
@@ -2636,12 +2640,13 @@ class LmdbZoningService
 		}
 		while ($row = $this->db->fetch_object($resql)) {
 			foreach ($row as $fkcat) {
-				if (empty($fkcat) || (int) $fkcat === (int) $zoneResult['fk_categorie']) {
+				if (empty($fkcat) || ($categoryToKeep > 0 && (int) $fkcat === $categoryToKeep)) {
 					continue;
 				}
 				$this->deleteCategoryLinkFromObject($object, $elementType, $linkType, (int) $fkElement, (int) $fkcat);
 			}
 		}
+		$this->db->free($resql);
 	}
 
 	/**

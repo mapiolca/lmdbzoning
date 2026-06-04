@@ -8,6 +8,7 @@
 - Synchronisation des catégories de zonage des centrales `powerplantpv` via les triggers `POWERPLANTPV_POWERPLANT_CREATE` et `POWERPLANTPV_POWERPLANT_MODIFY`, avec liaison native `categorie_powerplant`.
 - Affichage de la distance calculée seule sur les fiches zonées et agrégation des distances des centrales liées pour catégoriser les documents.
 - Retrait de l'entrée `Paramètres` du menu gauche, les réglages restant accessibles depuis la gestion des modules.
+- Recalcul et nettoyage des catégories de zone lors de la déliaison centrale-document, avec conservation des réglages de partage Multicompany à la désactivation/réactivation.
 
 ## 1.0.0 - 2026-06-03
 

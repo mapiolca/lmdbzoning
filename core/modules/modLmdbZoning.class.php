@@ -189,7 +189,6 @@ class modLmdbZoning extends DolibarrModules
 	{
 		$sql = array();
 		$savedConstants = $this->fetchLmdbZoningConstants();
-		$this->syncMulticompanySharing(0);
 
 		$result = $this->_remove($sql, $options);
 		if ($result > 0 && !empty($savedConstants)) {
@@ -258,7 +257,7 @@ class modLmdbZoning extends DolibarrModules
 	/**
 	 * Synchronize Multicompany external module sharing payload.
 	 *
-	 * @param int $enable 1=merge, 0=remove module payload
+	 * @param int $enable 1=merge module payload
 	 * @return void
 	 */
 	private function syncMulticompanySharing($enable)
@@ -269,6 +268,9 @@ class modLmdbZoning extends DolibarrModules
 		if (!class_exists('ActionsLmdbZoning') || !function_exists('dolibarr_set_const')) {
 			return;
 		}
+		if (empty($enable)) {
+			return;
+		}
 
 		$current = array();
 		if (!empty($conf->global->MULTICOMPANY_EXTERNAL_MODULES_SHARING)) {
@@ -277,11 +279,7 @@ class modLmdbZoning extends DolibarrModules
 				$current = $decoded;
 			}
 		}
-		if ($enable) {
-			$current = array_replace_recursive($current, ActionsLmdbZoning::getMulticompanySharingDefinition());
-		} else {
-			unset($current['lmdbzoning']);
-		}
+		$current = array_replace_recursive(ActionsLmdbZoning::getMulticompanySharingDefinition(), $current);
 		dolibarr_set_const($this->db, 'MULTICOMPANY_EXTERNAL_MODULES_SHARING', json_encode($current), 'chaine', 0, '', (int) $conf->entity);
 	}
 

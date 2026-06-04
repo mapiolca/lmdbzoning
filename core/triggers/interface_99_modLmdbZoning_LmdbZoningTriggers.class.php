@@ -66,7 +66,7 @@ class InterfaceLmdbZoningTriggers
 		if ($action === 'OBJECT_LINK_DELETE' && function_exists('register_shutdown_function')) {
 			$applyCategory = !empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY);
 			register_shutdown_function(function () use ($targets, $profileRef, $applyCategory) {
-				$this->calculateZoningTargets($targets, $profileRef, $applyCategory, 1, null);
+				$this->calculateZoningTargetsDeferred($targets, $profileRef, $applyCategory);
 			});
 			return 0;
 		}
@@ -104,6 +104,9 @@ class InterfaceLmdbZoningTriggers
 				if (is_object($langs) && function_exists('setEventMessages')) {
 					setEventMessages($langs->trans('LmdbZoningTriggerCalculationFailed', $elementType, $fkElement, $error), null, 'warnings');
 				}
+				if ($applyCategory) {
+					$this->queueOrApplyStoredZoneCategory($elementType, $fkElement, $profileRef, $entity, (int) $isShutdownExecution);
+				}
 				continue;
 			}
 
@@ -134,8 +137,90 @@ class InterfaceLmdbZoningTriggers
 		}
 
 		register_shutdown_function(function () use ($elementType, $fkElement, $profileRef, $entity) {
-			$this->applyStoredZoneCategory($elementType, (int) $fkElement, $profileRef, (int) $entity);
+			$this->applyStoredZoneCategoryDeferred($elementType, (int) $fkElement, $profileRef, (int) $entity);
 		});
+	}
+
+	/**
+	 * Calculate zoning from a shutdown callback with a live database connection.
+	 *
+	 * @param array<int,array<string,mixed>> $targets       Targets
+	 * @param string                        $profileRef    Profile ref
+	 * @param bool                          $applyCategory Apply category
+	 * @return void
+	 */
+	private function calculateZoningTargetsDeferred(array $targets, $profileRef, $applyCategory)
+	{
+		$closeAfter = 0;
+		$db = $this->getDeferredDb($closeAfter);
+		if (!is_object($db)) {
+			dol_syslog(__METHOD__.' failed to get live database connection', LOG_WARNING);
+			return;
+		}
+
+		$trigger = new self($db);
+		$trigger->calculateZoningTargets($targets, $profileRef, $applyCategory, 1, null);
+
+		if ($closeAfter && method_exists($db, 'close')) {
+			$db->close();
+		}
+	}
+
+	/**
+	 * Apply stored category from a shutdown callback with a live database connection.
+	 *
+	 * @param string $elementType Object element type
+	 * @param int    $fkElement   Object id
+	 * @param string $profileRef  Profile ref
+	 * @param int    $entity      Entity id
+	 * @return void
+	 */
+	private function applyStoredZoneCategoryDeferred($elementType, $fkElement, $profileRef, $entity)
+	{
+		$closeAfter = 0;
+		$db = $this->getDeferredDb($closeAfter);
+		if (!is_object($db)) {
+			dol_syslog(__METHOD__.' failed to get live database connection', LOG_WARNING);
+			return;
+		}
+
+		$trigger = new self($db);
+		$trigger->applyStoredZoneCategory($elementType, (int) $fkElement, $profileRef, (int) $entity);
+
+		if ($closeAfter && method_exists($db, 'close')) {
+			$db->close();
+		}
+	}
+
+	/**
+	 * Return a live DB handler for deferred shutdown callbacks.
+	 *
+	 * @param int $closeAfter Set to 1 when a new connection was opened
+	 * @return DoliDB|null
+	 */
+	private function getDeferredDb(&$closeAfter)
+	{
+		global $conf, $db, $dolibarr_main_db_pass;
+
+		$closeAfter = 0;
+		if (is_object($this->db) && !empty($this->db->connected)) {
+			return $this->db;
+		}
+		if (is_object($db) && !empty($db->connected)) {
+			return $db;
+		}
+		if (!function_exists('getDoliDBInstance') || !is_object($conf) || empty($conf->db->type)) {
+			return null;
+		}
+
+		$closeAfter = 1;
+		$newDb = getDoliDBInstance($conf->db->type, $conf->db->host, (string) $conf->db->user, $dolibarr_main_db_pass, $conf->db->name, (int) $conf->db->port);
+		if (!is_object($newDb) || empty($newDb->connected)) {
+			$closeAfter = 0;
+			return null;
+		}
+
+		return $newDb;
 	}
 
 	/**
@@ -278,7 +363,17 @@ class InterfaceLmdbZoningTriggers
 			}
 		}
 
-		return $this->resolveZoningTargetsFromLinkPair($sourceType, $sourceId, $targetType, $targetId, $defaultEntity);
+		$targets = $this->resolveZoningTargetsFromLinkPair($sourceType, $sourceId, $targetType, $targetId, $defaultEntity);
+		if (empty($targets) && in_array($action, array('OBJECT_LINK_MODIFY', 'OBJECT_LINK_DELETE'), true)) {
+			$linkPairs = $this->fetchObjectLinkPairsFromContext($object, $sourceType, $sourceId, $targetType, $targetId);
+			foreach ($linkPairs as $linkPair) {
+				foreach ($this->resolveZoningTargetsFromLinkPair($linkPair['source_type'], (int) $linkPair['source_id'], $linkPair['target_type'], (int) $linkPair['target_id'], $defaultEntity) as $target) {
+					$this->addZoningTarget($targets, (string) $target['element_type'], (int) $target['fk_element'], (int) $target['entity']);
+				}
+			}
+		}
+
+		return array_values($targets);
 	}
 
 	/**
@@ -316,6 +411,62 @@ class InterfaceLmdbZoningTriggers
 		$this->db->free($resql);
 
 		return $linkPair;
+	}
+
+	/**
+	 * Fetch object-link pairs from trigger context when Dolibarr did not provide a usable rowid.
+	 *
+	 * @param object $object     Trigger object
+	 * @param string $sourceType Source type
+	 * @param int    $sourceId   Source id
+	 * @param string $targetType Target type
+	 * @param int    $targetId   Target id
+	 * @return array<int,array<string,mixed>>
+	 */
+	private function fetchObjectLinkPairsFromContext($object, $sourceType, $sourceId, $targetType, $targetId)
+	{
+		$where = array();
+		$sourceType = (string) $sourceType;
+		$targetType = (string) $targetType;
+		$sourceId = (int) $sourceId;
+		$targetId = (int) $targetId;
+
+		if ($sourceType !== '' && $sourceId > 0 && $targetType !== '' && $targetId > 0) {
+			$where[] = "(fk_source = ".$sourceId." AND sourcetype = '".$this->db->escape($sourceType)."' AND fk_target = ".$targetId." AND targettype = '".$this->db->escape($targetType)."')";
+		}
+
+		$objectType = $this->getObjectLinkType($object);
+		$objectId = $this->getObjectId($object);
+		if ($objectType !== '' && $objectId > 0) {
+			$where[] = "(fk_source = ".$objectId." AND sourcetype = '".$this->db->escape($objectType)."')";
+			$where[] = "(fk_target = ".$objectId." AND targettype = '".$this->db->escape($objectType)."')";
+		}
+
+		if (empty($where)) {
+			return array();
+		}
+
+		$sql = 'SELECT fk_source, sourcetype, fk_target, targettype';
+		$sql .= ' FROM '.MAIN_DB_PREFIX.'element_element';
+		$sql .= ' WHERE '.implode(' OR ', array_unique($where));
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			dol_syslog(__METHOD__.' failed to fetch object link pairs error='.$this->db->lasterror(), LOG_WARNING);
+			return array();
+		}
+
+		$linkPairs = array();
+		while ($obj = $this->db->fetch_object($resql)) {
+			$linkPairs[] = array(
+				'source_id' => (int) $obj->fk_source,
+				'source_type' => (string) $obj->sourcetype,
+				'target_id' => (int) $obj->fk_target,
+				'target_type' => (string) $obj->targettype,
+			);
+		}
+		$this->db->free($resql);
+
+		return $linkPairs;
 	}
 
 	/**
