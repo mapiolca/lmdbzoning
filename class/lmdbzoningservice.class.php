@@ -59,7 +59,8 @@ class LmdbZoningService
 			'projet' => array('alias' => 'project'),
 			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter', 'module' => 'ficheinter', 'table_element' => 'fichinter', 'category_type_id' => 14, 'category_link_type' => 'fichinter', 'category_field' => 'fk_categorie_fichinter', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
 			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek', 'module' => 'timesheetweek', 'table_element' => 'timesheet_week', 'category_type_id' => 450003, 'category_link_type' => 'timesheetweek', 'category_field' => 'fk_categorie_timesheetweek', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
-			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_id' => 450004, 'category_link_type' => 'powerplantpv', 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30),
+			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_id' => 450004, 'category_link_type' => 'powerplant', 'category_link_table' => 'categorie_powerplant', 'category_link_object_field' => 'fk_powerplant', 'category_link_category_field' => 'fk_categorie', 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30),
+			'powerplant' => array('alias' => 'powerplantpv'),
 		);
 
 		foreach ($definitions as $elementType => $definition) {
@@ -120,8 +121,29 @@ class LmdbZoningService
 	public static function getZonableObjectDefinition($elementType)
 	{
 		$definitions = self::getZonableObjectDefinitions(0);
+		$elementType = self::normalizeZonableElementType($elementType);
 
 		return isset($definitions[$elementType]) ? $definitions[$elementType] : null;
+	}
+
+	/**
+	 * Normalize aliases to the canonical element type stored by lmdbzoning.
+	 *
+	 * @param string $elementType Element type or Dolibarr object element
+	 * @return string
+	 */
+	public static function normalizeZonableElementType($elementType)
+	{
+		$elementType = (string) $elementType;
+		$aliases = array(
+			'contrat' => 'contract',
+			'order' => 'commande',
+			'invoice' => 'facture',
+			'projet' => 'project',
+			'powerplant' => 'powerplantpv',
+		);
+
+		return isset($aliases[$elementType]) ? $aliases[$elementType] : $elementType;
 	}
 
 	/**
@@ -194,6 +216,7 @@ class LmdbZoningService
 	{
 		global $conf;
 
+		$elementType = self::normalizeZonableElementType($elementType);
 		$object = $this->fetchSupportedObject($elementType, (int) $fkElement, (int) $conf->entity);
 		if (!is_object($object)) {
 			return (int) $fkElement > 0 ? '#'.((int) $fkElement) : '';
@@ -303,6 +326,7 @@ class LmdbZoningService
 	{
 		global $conf, $user;
 
+		$elementType = self::normalizeZonableElementType($elementType);
 		$definition = self::getZonableObjectDefinition($elementType);
 		if (empty($definition['available'])) {
 			$result = $this->failedResult('ObjectTypeNotSupported');
@@ -367,6 +391,7 @@ class LmdbZoningService
 	{
 		global $conf;
 
+		$elementType = self::normalizeZonableElementType($elementType);
 		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
 		$sql = 'SELECT oz.* FROM '.MAIN_DB_PREFIX.'lmdbzoning_object_zone as oz';
 		if ($profileRef !== null && $profileRef !== '') {
@@ -402,6 +427,7 @@ class LmdbZoningService
 	 */
 	public function applyZoneCategoryToObject($elementType, $fkElement, array $zoneResult)
 	{
+		$elementType = self::normalizeZonableElementType($elementType);
 		if (empty($zoneResult['fk_categorie'])) {
 			return 0;
 		}
@@ -455,6 +481,7 @@ class LmdbZoningService
 	{
 		global $conf;
 
+		$elementType = self::normalizeZonableElementType($elementType);
 		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
 		$storedZone = $this->getObjectZone($elementType, (int) $fkElement, $profileRef, $entity);
 		if (empty($storedZone)) {
@@ -1063,7 +1090,7 @@ class LmdbZoningService
 		global $conf;
 
 		$entity = $entity > 0 ? (int) $entity : (int) $conf->entity;
-		$elementType = (string) $elementType;
+		$elementType = self::normalizeZonableElementType($elementType);
 		$fkElement = (int) $fkElement;
 		$profileRef = trim((string) $profileRef);
 		if ($elementType === '' || $fkElement <= 0 || $profileRef === '') {
@@ -1160,7 +1187,7 @@ class LmdbZoningService
 	 */
 	private function isAliasElementType($elementType)
 	{
-		return in_array($elementType, array('order', 'invoice', 'contrat', 'projet'), true);
+		return in_array($elementType, array('order', 'invoice', 'contrat', 'projet', 'powerplant'), true);
 	}
 
 	/**
@@ -2059,15 +2086,7 @@ class LmdbZoningService
 	 */
 	private function normalizeCategoryElementType($elementType)
 	{
-		$elementType = (string) $elementType;
-		$aliases = array(
-			'contrat' => 'contract',
-			'order' => 'commande',
-			'invoice' => 'facture',
-			'projet' => 'project',
-		);
-
-		return isset($aliases[$elementType]) ? $aliases[$elementType] : $elementType;
+		return self::normalizeZonableElementType($elementType);
 	}
 
 	/**

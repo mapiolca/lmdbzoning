@@ -104,7 +104,28 @@ class InterfaceLmdbZoningTriggers
 	 */
 	private function isWatchedObjectAction($action)
 	{
+		if ($this->isWatchedPowerPlantPvAction($action)) {
+			return true;
+		}
+		if (strpos((string) $action, 'POWERPLANTPV_POWERPLANT_') === 0) {
+			return false;
+		}
+
 		return (bool) preg_match('/_(CREATE|MODIFY|UPDATE)$/', (string) $action);
+	}
+
+	/**
+	 * PowerPlantPV address changes are carried by the canonical object triggers only.
+	 *
+	 * @param string $action Trigger action
+	 * @return bool
+	 */
+	private function isWatchedPowerPlantPvAction($action)
+	{
+		return in_array((string) $action, array(
+			'POWERPLANTPV_POWERPLANT_CREATE',
+			'POWERPLANTPV_POWERPLANT_MODIFY',
+		), true);
 	}
 
 	/**
@@ -123,13 +144,13 @@ class InterfaceLmdbZoningTriggers
 		$objectTable = !empty($object->table_element) ? (string) $object->table_element : '';
 		foreach (LmdbZoningService::getZonableObjectDefinitions(1) as $elementType => $definition) {
 			if (!empty($definition['class']) && ($objectClass === $definition['class'] || is_a($object, $definition['class']))) {
-				return $elementType;
+				return LmdbZoningService::normalizeZonableElementType($elementType);
 			}
 			if ($objectElement !== '' && $objectElement === $elementType) {
-				return $elementType;
+				return LmdbZoningService::normalizeZonableElementType($elementType);
 			}
 			if ($objectTable !== '' && !empty($definition['table_element']) && $objectTable === $definition['table_element']) {
-				return $elementType;
+				return LmdbZoningService::normalizeZonableElementType($elementType);
 			}
 		}
 

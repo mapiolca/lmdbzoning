@@ -68,7 +68,8 @@ Chaque table métier porte `entity`.
 
 ## Intégrations
 
-- `powerplantpv` : lecture optionnelle de l'adresse d'installation et affichage d'un bloc de résultat si un zonage existe.
+- `powerplantpv` : lecture optionnelle de l'adresse d'installation, affichage d'un bloc de résultat si un zonage existe, et recalcul via les triggers `POWERPLANTPV_POWERPLANT_CREATE` / `POWERPLANTPV_POWERPLANT_MODIFY`.
+- Catégories centrales : si `LMDBZONING_AUTO_APPLY_CATEGORY` est activé, les catégories de zonage sont synchronisées dans la liaison native `categorie_powerplant` sans modifier les autres catégories manuelles.
 - `pricelist` : doit lire `lmdbzoning_object_zone` ou `LmdbZoningService::getObjectZone()`, sans recalculer la distance.
 - `timesheetweek` : supporté comme `element_type`; aucune modification automatique des temps en V1.
 

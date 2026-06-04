@@ -4,6 +4,7 @@
 
 - Ajout d'un multiselect de catégories contrat sur la fiche contrat via hook, avec conservation des catégories issues du zonage.
 - Correction de l'affichage des catégories dans la fiche contrat, juste après la date, et suppression d'un warning PHP 8.2 sur les hooks.
+- Synchronisation des catégories de zonage des centrales `powerplantpv` via les triggers `POWERPLANTPV_POWERPLANT_CREATE` et `POWERPLANTPV_POWERPLANT_MODIFY`, avec liaison native `categorie_powerplant`.
 
 ## 1.0.0 - 2026-06-03
 
