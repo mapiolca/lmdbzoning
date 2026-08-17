@@ -8,7 +8,10 @@ dol_include_once('/lmdbzoning/class/lmdbzoningcompatibility.class.php');
 
 $langs->loadLangs(array('admin', 'lmdbzoning@lmdbzoning'));
 
-if (!$user->admin && (!method_exists($user, 'hasRight') || !$user->hasRight('lmdbzoning', 'lmdbzoning', 'admin'))) {
+if (!$user->admin && !$user->hasRight('lmdbzoning', 'lmdbzoning', 'admin')) {
+	accessforbidden();
+}
+if (!isModEnabled('lmdbzoning')) {
 	accessforbidden();
 }
 

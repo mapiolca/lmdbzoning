@@ -46,20 +46,20 @@ class LmdbZoningService
 	public static function getZonableObjectDefinitions($onlyAvailable = 0)
 	{
 		$definitions = array(
-			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_link_type' => 'soc', 'category_link_table' => 'categorie_societe', 'category_link_object_field' => 'fk_soc', 'category_link_category_field' => 'fk_categorie', 'category_field' => 'fk_categorie_societe', 'address_strategy' => 'self', 'category_priority' => 10),
-			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_id' => 4, 'category_link_type' => 'contact', 'category_field' => 'fk_categorie_contact', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30),
-			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal', 'module' => 'propal', 'table_element' => 'propal', 'category_type_id' => 23, 'category_link_type' => 'propal', 'category_field' => 'fk_categorie_propal', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
-			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande', 'module' => 'commande', 'table_element' => 'commande', 'category_type_id' => 16, 'category_link_type' => 'commande', 'category_field' => 'fk_categorie_commande', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'societe' => array('file' => '/societe/class/societe.class.php', 'class' => 'Societe', 'module' => 'societe', 'table_element' => 'societe', 'category_type_id' => 2, 'category_link_type' => 'soc', 'category_link_table' => 'categorie_societe', 'category_link_object_field' => 'fk_soc', 'category_link_category_field' => 'fk_categorie', 'category_field' => 'fk_categorie_societe', 'address_strategy' => 'self', 'category_priority' => 10, 'auto_category_label' => 'AutoCategorizationThirdparty'),
+			'contact' => array('file' => '/contact/class/contact.class.php', 'class' => 'Contact', 'module' => 'societe', 'table_element' => 'socpeople', 'category_type_id' => 4, 'category_link_type' => 'contact', 'category_field' => 'fk_categorie_contact', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30, 'auto_category_label' => 'AutoCategorizationContact'),
+			'propal' => array('file' => '/comm/propal/class/propal.class.php', 'class' => 'Propal', 'module' => 'propal', 'table_element' => 'propal', 'category_type_id' => 23, 'category_link_type' => 'propal', 'category_field' => 'fk_categorie_propal', 'address_strategy' => 'thirdparty', 'category_priority' => 30, 'auto_category_label' => 'AutoCategorizationProposal'),
+			'commande' => array('file' => '/commande/class/commande.class.php', 'class' => 'Commande', 'module' => 'commande', 'table_element' => 'commande', 'category_type_id' => 16, 'category_link_type' => 'commande', 'category_field' => 'fk_categorie_commande', 'address_strategy' => 'thirdparty', 'category_priority' => 30, 'auto_category_label' => 'AutoCategorizationOrder'),
 			'order' => array('alias' => 'commande'),
-			'facture' => array('file' => '/compta/facture/class/facture.class.php', 'class' => 'Facture', 'module' => 'facture', 'table_element' => 'facture', 'category_type_id' => 17, 'category_link_type' => 'facture', 'category_field' => 'fk_categorie_facture', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'facture' => array('file' => '/compta/facture/class/facture.class.php', 'class' => 'Facture', 'module' => 'facture', 'table_element' => 'facture', 'category_type_id' => 17, 'category_link_type' => 'facture', 'category_field' => 'fk_categorie_facture', 'address_strategy' => 'thirdparty', 'category_priority' => 30, 'auto_category_label' => 'AutoCategorizationInvoice'),
 			'invoice' => array('alias' => 'facture'),
-			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat', 'module' => 'contrat', 'table_element' => 'contrat', 'category_type_id' => 450022, 'category_link_type' => 'contract', 'category_link_table' => 'categorie_contract', 'category_link_object_field' => 'fk_contract', 'category_link_category_field' => 'fk_categorie', 'category_field' => 'fk_categorie_contract', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
+			'contract' => array('file' => '/contrat/class/contrat.class.php', 'class' => 'Contrat', 'module' => 'contrat', 'table_element' => 'contrat', 'category_type_id' => 450022, 'category_link_type' => 'contract', 'category_link_table' => 'categorie_contract', 'category_link_object_field' => 'fk_contract', 'category_link_category_field' => 'fk_categorie', 'category_field' => 'fk_categorie_contract', 'address_strategy' => 'thirdparty', 'category_priority' => 30, 'auto_category_label' => 'AutoCategorizationContract'),
 			'contrat' => array('alias' => 'contract'),
-			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project', 'module' => 'project', 'table_element' => 'projet', 'category_type_id' => 6, 'category_link_type' => 'project', 'category_field' => 'fk_categorie_project', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 20),
+			'project' => array('file' => '/projet/class/project.class.php', 'class' => 'Project', 'module' => 'project', 'table_element' => 'projet', 'category_type_id' => 6, 'category_link_type' => 'project', 'category_field' => 'fk_categorie_project', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 20, 'auto_category_label' => 'AutoCategorizationProject'),
 			'projet' => array('alias' => 'project'),
-			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter', 'module' => 'ficheinter', 'table_element' => 'fichinter', 'category_type_id' => 14, 'category_link_type' => 'fichinter', 'category_field' => 'fk_categorie_fichinter', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
-			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek', 'module' => 'timesheetweek', 'table_element' => 'timesheet_week', 'category_type_id' => 450003, 'category_link_type' => 'timesheetweek', 'category_field' => 'fk_categorie_timesheetweek', 'address_strategy' => 'thirdparty', 'category_priority' => 30),
-			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_id' => 450004, 'category_link_type' => 'powerplant', 'category_link_table' => 'categorie_powerplant', 'category_link_object_field' => 'fk_powerplant', 'category_link_category_field' => 'fk_categorie', 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30),
+			'fichinter' => array('file' => '/fichinter/class/fichinter.class.php', 'class' => 'Fichinter', 'module' => 'ficheinter', 'table_element' => 'fichinter', 'category_type_id' => 14, 'category_link_type' => 'fichinter', 'category_field' => 'fk_categorie_fichinter', 'address_strategy' => 'thirdparty', 'category_priority' => 30, 'auto_category_label' => 'AutoCategorizationIntervention'),
+			'timesheetweek' => array('file' => '/timesheetweek/class/timesheetweek.class.php', 'class' => 'TimesheetWeek', 'module' => 'timesheetweek', 'table_element' => 'timesheet_week', 'category_type_id' => 450003, 'category_link_type' => 'timesheetweek', 'category_field' => 'fk_categorie_timesheetweek', 'address_strategy' => 'thirdparty', 'category_priority' => 30, 'auto_category_label' => 'AutoCategorizationTimesheetWeek'),
+			'powerplantpv' => array('file' => '/powerplantpv/class/powerplant.class.php', 'class' => 'PowerPlant', 'module' => 'powerplantpv', 'table_element' => 'powerplantpv_powerplant', 'category_type_id' => 450004, 'category_link_type' => 'powerplant', 'category_link_table' => 'categorie_powerplant', 'category_link_object_field' => 'fk_powerplant', 'category_link_category_field' => 'fk_categorie', 'category_field' => 'fk_categorie_powerplantpv', 'address_strategy' => 'self_then_thirdparty', 'category_priority' => 30, 'auto_category_label' => 'AutoCategorizationPowerPlantPV'),
 			'powerplant' => array('alias' => 'powerplantpv'),
 		);
 
@@ -83,6 +83,84 @@ class LmdbZoningService
 		}
 
 		return $available;
+	}
+
+	/**
+	 * Return canonical object definitions available for automatic categorization settings.
+	 *
+	 * @param int $onlyEnabled 1=only objects whose Dolibarr module is enabled
+	 * @return array<string,array<string,mixed>>
+	 */
+	public static function getAutomaticCategorizationDefinitions($onlyEnabled = 0)
+	{
+		$automaticDefinitions = array();
+		foreach (self::getZonableObjectDefinitions(0) as $elementType => $definition) {
+			if (self::normalizeZonableElementType($elementType) !== $elementType || empty($definition['auto_category_label'])) {
+				continue;
+			}
+			if (!empty($onlyEnabled) && !empty($definition['module']) && !isModEnabled((string) $definition['module'])) {
+				continue;
+			}
+			$constantName = self::getAutomaticCategoryConstantName($elementType);
+			if ($constantName === '') {
+				continue;
+			}
+			$definition['auto_category_constant'] = $constantName;
+			$automaticDefinitions[$elementType] = $definition;
+		}
+
+		return $automaticDefinitions;
+	}
+
+	/**
+	 * Return the entity-scoped Dolibarr constant used by one canonical object type.
+	 *
+	 * @param string $elementType Object element type or alias
+	 * @return string
+	 */
+	public static function getAutomaticCategoryConstantName($elementType)
+	{
+		$elementType = self::normalizeZonableElementType($elementType);
+		$supportedTypes = array('societe', 'contact', 'propal', 'commande', 'facture', 'contract', 'project', 'fichinter', 'timesheetweek', 'powerplantpv');
+		if (!in_array($elementType, $supportedTypes, true)) {
+			return '';
+		}
+
+		return 'LMDBZONING_AUTO_APPLY_CATEGORY_'.strtoupper($elementType);
+	}
+
+	/**
+	 * Check whether automatic category application is enabled for one object type.
+	 *
+	 * Before the activation migration has run, the legacy global setting remains
+	 * the compatibility fallback so deploying code cannot silently change behavior.
+	 *
+	 * @param string $elementType Object element type or alias
+	 * @return bool
+	 */
+	public static function isAutomaticCategoryApplicationEnabled($elementType)
+	{
+		$constantName = self::getAutomaticCategoryConstantName($elementType);
+		if ($constantName === '') {
+			return false;
+		}
+		if (!getDolGlobalInt('LMDBZONING_AUTO_APPLY_CATEGORY_MIGRATED')) {
+			return (bool) getDolGlobalInt('LMDBZONING_AUTO_APPLY_CATEGORY');
+		}
+
+		return (bool) getDolGlobalInt($constantName);
+	}
+
+	/**
+	 * Decide whether category application is requested for a calculation.
+	 *
+	 * @param string $elementType        Object element type or alias
+	 * @param int    $forceApplyCategory 1=manual request overrides automatic settings
+	 * @return bool
+	 */
+	private static function shouldApplyCategory($elementType, $forceApplyCategory = 0)
+	{
+		return !empty($forceApplyCategory) || self::isAutomaticCategoryApplicationEnabled($elementType);
 	}
 
 	/**
@@ -342,7 +420,7 @@ class LmdbZoningService
 			$result['element_type'] = $elementType;
 			$result['fk_element'] = (int) $fkElement;
 			$this->storeObjectZoneResult($elementType, (int) $fkElement, $result, $entity);
-			if (empty($skipApplyCategory) && $result['status'] === 'ok' && (!empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY) || !empty($forceApplyCategory))) {
+			if (empty($skipApplyCategory) && $result['status'] === 'ok' && self::shouldApplyCategory($elementType, $forceApplyCategory)) {
 				$this->applyZoneCategoryToObject($elementType, (int) $fkElement, $result);
 			}
 			$this->logEvent('LMDBZONING_OBJECT_CALCULATE', $elementType, (int) $fkElement, isset($result['message']) ? $result['message'] : '', $result);
@@ -370,7 +448,7 @@ class LmdbZoningService
 		$result = $this->calculateZoneForAddress($address, $profileRef, $entity);
 		$result['entity'] = $entity;
 		$this->storeObjectZoneResult($elementType, (int) $fkElement, $result, $entity);
-		if (empty($skipApplyCategory) && $result['status'] === 'ok' && (!empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY) || !empty($forceApplyCategory))) {
+		if (empty($skipApplyCategory) && $result['status'] === 'ok' && self::shouldApplyCategory($elementType, $forceApplyCategory)) {
 			$this->applyZoneCategoryToObject($elementType, (int) $fkElement, $result);
 		}
 		$this->logEvent('LMDBZONING_OBJECT_CALCULATE', $elementType, (int) $fkElement, isset($result['message']) ? $result['message'] : '', $result);
@@ -1219,7 +1297,7 @@ class LmdbZoningService
 	 */
 	private static function isZonableDefinitionAvailable(array $definition)
 	{
-		if (!empty($definition['module']) && !self::isModuleEnabled((string) $definition['module'])) {
+		if (!empty($definition['module']) && !isModEnabled((string) $definition['module'])) {
 			return false;
 		}
 		if (!class_exists('Categorie') && defined('DOL_DOCUMENT_ROOT') && file_exists(DOL_DOCUMENT_ROOT.'/categories/class/categorie.class.php')) {
@@ -1230,29 +1308,6 @@ class LmdbZoningService
 		}
 
 		return true;
-	}
-
-	/**
-	 * Check Dolibarr module activation with compatible fallbacks.
-	 *
-	 * @param string $moduleKey Module key
-	 * @return bool
-	 */
-	private static function isModuleEnabled($moduleKey)
-	{
-		global $conf;
-
-		if (function_exists('isModEnabled')) {
-			return isModEnabled($moduleKey);
-		}
-		if (isset($conf->$moduleKey) && !empty($conf->$moduleKey->enabled)) {
-			return true;
-		}
-		if (isset($conf->global->{'MAIN_MODULE_'.strtoupper($moduleKey)}) && !empty($conf->global->{'MAIN_MODULE_'.strtoupper($moduleKey)})) {
-			return true;
-		}
-
-		return false;
 	}
 
 	/**

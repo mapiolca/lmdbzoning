@@ -64,14 +64,13 @@ class InterfaceLmdbZoningTriggers
 		}
 
 		if ($action === 'OBJECT_LINK_DELETE' && function_exists('register_shutdown_function')) {
-			$applyCategory = !empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY);
-			register_shutdown_function(function () use ($targets, $profileRef, $applyCategory) {
-				$this->calculateZoningTargetsDeferred($targets, $profileRef, $applyCategory);
+			register_shutdown_function(function () use ($targets, $profileRef) {
+				$this->calculateZoningTargetsDeferred($targets, $profileRef);
 			});
 			return 0;
 		}
 
-		$this->calculateZoningTargets($targets, $profileRef, !empty($conf->global->LMDBZONING_AUTO_APPLY_CATEGORY), 0, $langs);
+		$this->calculateZoningTargets($targets, $profileRef, 0, $langs);
 
 		return 0;
 	}
@@ -81,18 +80,18 @@ class InterfaceLmdbZoningTriggers
 	 *
 	 * @param array<int,array<string,mixed>> $targets             Targets
 	 * @param string                        $profileRef          Profile ref
-	 * @param bool                          $applyCategory       Apply category
 	 * @param int                           $isShutdownExecution 1=already running in shutdown
 	 * @param Translate|null                $langs               Langs
 	 * @return int
 	 */
-	private function calculateZoningTargets(array $targets, $profileRef, $applyCategory, $isShutdownExecution = 0, $langs = null)
+	private function calculateZoningTargets(array $targets, $profileRef, $isShutdownExecution = 0, $langs = null)
 	{
 		$service = new LmdbZoningService($this->db);
 		foreach ($this->deduplicateTargets($targets) as $target) {
 			$elementType = !empty($target['element_type']) ? (string) $target['element_type'] : '';
 			$fkElement = !empty($target['fk_element']) ? (int) $target['fk_element'] : 0;
 			$entity = !empty($target['entity']) ? (int) $target['entity'] : 0;
+			$applyCategory = !empty($target['apply_category']);
 			if ($elementType === '' || $fkElement <= 0 || $entity <= 0) {
 				continue;
 			}
@@ -146,10 +145,9 @@ class InterfaceLmdbZoningTriggers
 	 *
 	 * @param array<int,array<string,mixed>> $targets       Targets
 	 * @param string                        $profileRef    Profile ref
-	 * @param bool                          $applyCategory Apply category
 	 * @return void
 	 */
-	private function calculateZoningTargetsDeferred(array $targets, $profileRef, $applyCategory)
+	private function calculateZoningTargetsDeferred(array $targets, $profileRef)
 	{
 		$closeAfter = 0;
 		$db = $this->getDeferredDb($closeAfter);
@@ -159,7 +157,7 @@ class InterfaceLmdbZoningTriggers
 		}
 
 		$trigger = new self($db);
-		$trigger->calculateZoningTargets($targets, $profileRef, $applyCategory, 1, null);
+		$trigger->calculateZoningTargets($targets, $profileRef, 1, null);
 
 		if ($closeAfter && method_exists($db, 'close')) {
 			$db->close();
@@ -505,9 +503,10 @@ class InterfaceLmdbZoningTriggers
 	 * @param string                           $elementType Element type
 	 * @param int                              $fkElement   Object id
 	 * @param int                              $entity      Entity id
+	 * @param bool|null                        $applyCategory Apply category; null reads the current object switch
 	 * @return void
 	 */
-	private function addZoningTarget(array &$targets, $elementType, $fkElement, $entity)
+	private function addZoningTarget(array &$targets, $elementType, $fkElement, $entity, $applyCategory = null)
 	{
 		$elementType = LmdbZoningService::normalizeZonableElementType((string) $elementType);
 		$fkElement = (int) $fkElement;
@@ -515,11 +514,15 @@ class InterfaceLmdbZoningTriggers
 		if ($elementType === '' || $fkElement <= 0 || $entity <= 0) {
 			return;
 		}
+		if ($applyCategory === null) {
+			$applyCategory = LmdbZoningService::isAutomaticCategoryApplicationEnabled($elementType);
+		}
 		$key = $elementType.':'.$fkElement.':'.$entity;
 		$targets[$key] = array(
 			'element_type' => $elementType,
 			'fk_element' => $fkElement,
 			'entity' => $entity,
+			'apply_category' => (bool) $applyCategory,
 		);
 	}
 
@@ -536,7 +539,8 @@ class InterfaceLmdbZoningTriggers
 			if (empty($target['element_type']) || empty($target['fk_element']) || empty($target['entity'])) {
 				continue;
 			}
-			$this->addZoningTarget($deduplicated, (string) $target['element_type'], (int) $target['fk_element'], (int) $target['entity']);
+			$applyCategory = array_key_exists('apply_category', $target) ? (bool) $target['apply_category'] : null;
+			$this->addZoningTarget($deduplicated, (string) $target['element_type'], (int) $target['fk_element'], (int) $target['entity'], $applyCategory);
 		}
 
 		return array_values($deduplicated);

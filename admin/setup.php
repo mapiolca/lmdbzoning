@@ -13,10 +13,10 @@ dol_include_once('/lmdbzoning/class/lmdbzoningservice.class.php');
 
 $langs->loadLangs(array('admin', 'lmdbzoning@lmdbzoning'));
 
-if (!$user->admin && (!method_exists($user, 'hasRight') || !$user->hasRight('lmdbzoning', 'lmdbzoning', 'admin'))) {
+if (!$user->admin && !$user->hasRight('lmdbzoning', 'lmdbzoning', 'admin')) {
 	accessforbidden();
 }
-if (function_exists('isModEnabled') && !isModEnabled('lmdbzoning')) {
+if (!isModEnabled('lmdbzoning')) {
 	accessforbidden();
 }
 
@@ -31,7 +31,6 @@ if ($action === 'save') {
 		'LMDBZONING_GEOCODER_API_URL' => GETPOST('LMDBZONING_GEOCODER_API_URL', 'alphanohtml'),
 		'LMDBZONING_GEOCODER_TIMEOUT' => GETPOST('LMDBZONING_GEOCODER_TIMEOUT', 'int'),
 		'LMDBZONING_CACHE_DURATION_DAYS' => GETPOST('LMDBZONING_CACHE_DURATION_DAYS', 'int'),
-		'LMDBZONING_AUTO_APPLY_CATEGORY' => GETPOST('LMDBZONING_AUTO_APPLY_CATEGORY', 'int'),
 		'LMDBZONING_ALLOW_MANUAL_OVERRIDE' => GETPOST('LMDBZONING_ALLOW_MANUAL_OVERRIDE', 'int'),
 		'LMDBZONING_DEFAULT_PROFILE' => GETPOST('LMDBZONING_DEFAULT_PROFILE', 'alphanohtml'),
 		'LMDBZONING_CRON_ENABLED' => GETPOST('LMDBZONING_CRON_ENABLED', 'int'),
@@ -88,7 +87,6 @@ lmdbzoning_print_const_closed_choice('LMDBZONING_GEOCODER_PROVIDER', 'GeocoderPr
 lmdbzoning_print_const_text('LMDBZONING_GEOCODER_API_URL', 'GeocoderApiUrl', 'https://data.geopf.fr/geocodage/search');
 lmdbzoning_print_const_text('LMDBZONING_GEOCODER_TIMEOUT', 'GeocoderTimeout', '5');
 lmdbzoning_print_const_text('LMDBZONING_CACHE_DURATION_DAYS', 'CacheDurationDays', '365');
-lmdbzoning_print_const_yesno('LMDBZONING_AUTO_APPLY_CATEGORY', 'AutoApplyCategory');
 lmdbzoning_print_const_yesno('LMDBZONING_ALLOW_MANUAL_OVERRIDE', 'AllowManualOverride');
 lmdbzoning_print_const_text('LMDBZONING_DEFAULT_PROFILE', 'DefaultProfile', 'MAINT_PV_RES_1_9KWC');
 lmdbzoning_print_const_yesno('LMDBZONING_CRON_ENABLED', 'EnableCron');
@@ -98,6 +96,26 @@ lmdbzoning_print_const_text('LMDBZONING_CRON_RECALCULATE_AFTER_DAYS', 'CronRecal
 print '</table>';
 print '<div class="center"><input class="button button-save" type="submit" value="'.$langs->trans('Save').'"></div>';
 print '</form>';
+
+print '<br>';
+print load_fiche_titre($langs->trans('AutomaticCategorization'), '', 'category');
+print '<div class="underbanner opacitymedium">'.$langs->trans('AutomaticCategorizationDescription').'</div>';
+print '<br>';
+print '<table class="noborder centpercent">';
+print '<tr class="liste_titre"><th>'.$langs->trans('AutomaticCategorizationObject').'</th><th class="right">'.$langs->trans('AutomaticCategorizationEnabled').'</th></tr>';
+$automaticCategorizationDefinitions = LmdbZoningService::getAutomaticCategorizationDefinitions(1);
+if (empty($automaticCategorizationDefinitions)) {
+	print '<tr class="oddeven"><td colspan="2"><span class="opacitymedium">'.$langs->trans('NoRecordFound').'</span></td></tr>';
+} else {
+	foreach ($automaticCategorizationDefinitions as $definition) {
+		$constantName = (string) $definition['auto_category_constant'];
+		print '<tr class="oddeven">';
+		print '<td>'.$langs->trans((string) $definition['auto_category_label']).'</td>';
+		print '<td class="right">'.ajax_constantonoff($constantName, array(), (int) $conf->entity, 0, 0, 0, 2, 0, 1).'</td>';
+		print '</tr>';
+	}
+}
+print '</table>';
 
 print '<br>';
 print load_fiche_titre($langs->trans('InitialSetupWizard'), '', 'setup');
@@ -146,8 +164,8 @@ $db->close();
  */
 function lmdbzoning_print_const_text($name, $label, $default = '')
 {
-	global $conf, $langs;
-	$value = isset($conf->global->$name) ? $conf->global->$name : $default;
+	global $langs;
+	$value = getDolGlobalString($name, $default);
 	print '<tr><td class="titlefield">'.$langs->trans($label).'</td><td><input class="flat minwidth500" type="text" name="'.$name.'" value="'.dol_escape_htmltag($value).'"></td></tr>';
 }
 
@@ -160,8 +178,8 @@ function lmdbzoning_print_const_text($name, $label, $default = '')
  */
 function lmdbzoning_print_const_yesno($name, $label)
 {
-	global $conf, $langs, $form;
-	$value = !empty($conf->global->$name) ? 1 : 0;
+	global $langs, $form;
+	$value = getDolGlobalInt($name);
 	print '<tr><td class="titlefield">'.$langs->trans($label).'</td><td>'.$form->selectyesno($name, $value, 1).'</td></tr>';
 }
 
@@ -175,8 +193,8 @@ function lmdbzoning_print_const_yesno($name, $label)
  */
 function lmdbzoning_print_const_closed_choice($name, $label, $default = '')
 {
-	global $conf, $langs;
-	$value = isset($conf->global->$name) ? $conf->global->$name : $default;
+	global $langs;
+	$value = getDolGlobalString($name, $default);
 	print '<tr><td class="titlefield">'.$langs->trans($label).'</td><td>'.lmdbzoning_render_closed_choice_select($name, $value, false).'</td></tr>';
 }
 

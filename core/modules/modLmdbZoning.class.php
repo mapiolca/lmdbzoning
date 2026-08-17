@@ -77,6 +77,17 @@ class modLmdbZoning extends DolibarrModules
 			array('LMDBZONING_GEOCODER_TIMEOUT', 'chaine', '5', 'Geocoder timeout', 0, 'current', 1),
 			array('LMDBZONING_CACHE_DURATION_DAYS', 'chaine', '365', 'Cache duration', 0, 'current', 1),
 			array('LMDBZONING_AUTO_APPLY_CATEGORY', 'chaine', '0', 'Auto apply category', 0, 'current', 1),
+			array('LMDBZONING_AUTO_APPLY_CATEGORY_SOCIETE', 'chaine', '0', 'Auto apply category to third parties', 0, 'current', 1),
+			array('LMDBZONING_AUTO_APPLY_CATEGORY_CONTACT', 'chaine', '0', 'Auto apply category to contacts', 0, 'current', 1),
+			array('LMDBZONING_AUTO_APPLY_CATEGORY_PROPAL', 'chaine', '0', 'Auto apply category to proposals', 0, 'current', 1),
+			array('LMDBZONING_AUTO_APPLY_CATEGORY_COMMANDE', 'chaine', '0', 'Auto apply category to orders', 0, 'current', 1),
+			array('LMDBZONING_AUTO_APPLY_CATEGORY_FACTURE', 'chaine', '0', 'Auto apply category to invoices', 0, 'current', 1),
+			array('LMDBZONING_AUTO_APPLY_CATEGORY_CONTRACT', 'chaine', '0', 'Auto apply category to contracts', 0, 'current', 1),
+			array('LMDBZONING_AUTO_APPLY_CATEGORY_PROJECT', 'chaine', '0', 'Auto apply category to projects', 0, 'current', 1),
+			array('LMDBZONING_AUTO_APPLY_CATEGORY_FICHINTER', 'chaine', '0', 'Auto apply category to interventions', 0, 'current', 1),
+			array('LMDBZONING_AUTO_APPLY_CATEGORY_TIMESHEETWEEK', 'chaine', '0', 'Auto apply category to weekly timesheets', 0, 'current', 1),
+			array('LMDBZONING_AUTO_APPLY_CATEGORY_POWERPLANTPV', 'chaine', '0', 'Auto apply category to photovoltaic power plants', 0, 'current', 1),
+			array('LMDBZONING_AUTO_APPLY_CATEGORY_MIGRATED', 'chaine', '0', 'Automatic category settings migration marker', 0, 'current', 1),
 			array('LMDBZONING_ALLOW_MANUAL_OVERRIDE', 'chaine', '1', 'Allow manual override', 0, 'current', 1),
 			array('LMDBZONING_DEFAULT_PROFILE', 'chaine', 'MAINT_PV_RES_1_9KWC', 'Default profile', 0, 'current', 1),
 			array('LMDBZONING_CRON_ENABLED', 'chaine', '0', 'Enable cron', 0, 'current', 1),
@@ -90,41 +101,41 @@ class modLmdbZoning extends DolibarrModules
 		$this->boxes = array();
 
 		$r = 0;
-		$this->rights[$r][0] = $this->numero + 1;
+		$r++;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Read lmdbzoning data';
 		$this->rights[$r][4] = 'lmdbzoning';
 		$this->rights[$r][5] = 'read';
 		$r++;
-		$this->rights[$r][0] = $this->numero + 2;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Create/modify lmdbzoning data';
 		$this->rights[$r][4] = 'lmdbzoning';
 		$this->rights[$r][5] = 'write';
 		$r++;
-		$this->rights[$r][0] = $this->numero + 3;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Delete lmdbzoning data';
 		$this->rights[$r][4] = 'lmdbzoning';
 		$this->rights[$r][5] = 'delete';
 		$r++;
-		$this->rights[$r][0] = $this->numero + 4;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Run geocoding';
 		$this->rights[$r][4] = 'lmdbzoning';
 		$this->rights[$r][5] = 'geocode';
 		$r++;
-		$this->rights[$r][0] = $this->numero + 5;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Override object zones';
 		$this->rights[$r][4] = 'lmdbzoning';
 		$this->rights[$r][5] = 'override';
 		$r++;
-		$this->rights[$r][0] = $this->numero + 6;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Administer lmdbzoning';
 		$this->rights[$r][4] = 'lmdbzoning';
 		$this->rights[$r][5] = 'admin';
 		$r++;
-		$this->rights[$r][0] = $this->numero + 7;
+		$this->rights[$r][0] = $this->numero * 100 + $r;
 		$this->rights[$r][1] = 'Use lmdbzoning API';
 		$this->rights[$r][4] = 'lmdbzoning';
 		$this->rights[$r][5] = 'api';
-		$r++;
 
 		$r = 0;
 		$this->menu[$r++] = array('fk_menu' => 'fk_mainmenu=tools', 'type' => 'left', 'titre' => 'Zoning', 'mainmenu' => 'tools', 'leftmenu' => 'lmdbzoning', 'url' => '/lmdbzoning/referencepoint_list.php', 'langs' => 'lmdbzoning@lmdbzoning', 'position' => 1000, 'enabled' => '$conf->lmdbzoning->enabled', 'perms' => '$user->hasRight("lmdbzoning", "lmdbzoning", "read")', 'target' => '', 'user' => 2, 'prefix' => img_picto('', 'fa-map-marker-alt', 'class="pictofixedwidth valignmiddle"'));
@@ -161,22 +172,141 @@ class modLmdbZoning extends DolibarrModules
 	{
 		global $conf;
 
-		$sql = array();
 		$this->syncProfileRefUniqueIndex();
 		$result = $this->_load_tables('/lmdbzoning/sql/');
 		if ($result < 0) {
 			return -1;
 		}
 		$this->syncProfileRefUniqueIndex();
+		$result = $this->migrateAutomaticCategoryConstants();
+		if ($result < 0) {
+			return -1;
+		}
 
 		$this->syncMulticompanySharing(1);
 
+		$sql = $this->getPermissionMigrationSql();
 		$result = $this->_init($sql, $options);
 		if ($result > 0) {
 			$this->syncEntityCronJob();
 		}
 
 		return $result;
+	}
+
+	/**
+	 * Migrate the legacy global automatic-category switch to per-object settings.
+	 *
+	 * Existing per-object values are preserved. Definitions are initialized even
+	 * when their target module is currently disabled so a later activation keeps
+	 * the historical behavior.
+	 *
+	 * @return int 1=done or already migrated, -1=error
+	 */
+	private function migrateAutomaticCategoryConstants()
+	{
+		global $conf;
+
+		$markerName = 'LMDBZONING_AUTO_APPLY_CATEGORY_MIGRATED';
+		$marker = $this->fetchCurrentEntityConstant($markerName);
+		if ($marker === null) {
+			return -1;
+		}
+		if (!empty($marker['found']) && (int) $marker['value'] === 1) {
+			return 1;
+		}
+
+		dol_include_once('/lmdbzoning/class/lmdbzoningservice.class.php');
+		if (!class_exists('LmdbZoningService') || !function_exists('dolibarr_set_const')) {
+			$this->error = 'Unable to load automatic categorization migration dependencies';
+			return -1;
+		}
+
+		$legacyValue = getDolGlobalInt('LMDBZONING_AUTO_APPLY_CATEGORY');
+		$definitions = LmdbZoningService::getAutomaticCategorizationDefinitions(0);
+		foreach ($definitions as $definition) {
+			$constantName = !empty($definition['auto_category_constant']) ? (string) $definition['auto_category_constant'] : '';
+			if ($constantName === '') {
+				continue;
+			}
+			$current = $this->fetchCurrentEntityConstant($constantName);
+			if ($current === null) {
+				return -1;
+			}
+			if (!empty($current['found'])) {
+				continue;
+			}
+			$result = dolibarr_set_const($this->db, $constantName, (string) $legacyValue, 'chaine', 0, '', (int) $conf->entity);
+			if ($result < 0) {
+				$this->error = 'Failed to migrate automatic categorization constant '.$constantName;
+				return -1;
+			}
+		}
+
+		$result = dolibarr_set_const($this->db, $markerName, '1', 'chaine', 0, '', (int) $conf->entity);
+		if ($result < 0) {
+			$this->error = 'Failed to store automatic categorization migration marker';
+			return -1;
+		}
+
+		return 1;
+	}
+
+	/**
+	 * Fetch a module constant from the active entity.
+	 *
+	 * @param string $name Constant name
+	 * @return array{found:bool,value:string}|null Null on SQL error
+	 */
+	private function fetchCurrentEntityConstant($name)
+	{
+		global $conf;
+
+		$sql = 'SELECT value FROM '.MAIN_DB_PREFIX.'const';
+		$sql .= " WHERE name = '".$this->db->escape((string) $name)."'";
+		$sql .= ' AND entity = '.((int) $conf->entity);
+		$resql = $this->db->query($sql);
+		if (!$resql) {
+			$this->error = $this->db->lasterror();
+			return null;
+		}
+		$obj = $this->db->fetch_object($resql);
+		$this->db->free($resql);
+		if (!is_object($obj)) {
+			return array('found' => false, 'value' => '');
+		}
+
+		return array('found' => true, 'value' => (string) $obj->value);
+	}
+
+	/**
+	 * Build the idempotent native permission assignment migration for this entity.
+	 *
+	 * @return array<int,string>
+	 */
+	private function getPermissionMigrationSql()
+	{
+		global $conf;
+
+		$sql = array();
+		$entity = (int) $conf->entity;
+		$legacyIds = array(450023, 450024, 450025, 450026, 450027, 450028, 450029);
+		foreach ($legacyIds as $offset => $legacyId) {
+			$newId = $this->numero * 100 + $offset + 1;
+			$sql[] = 'INSERT IGNORE INTO '.MAIN_DB_PREFIX.'user_rights (entity, fk_user, fk_id)'
+				.' SELECT entity, fk_user, '.$newId.' FROM '.MAIN_DB_PREFIX.'user_rights'
+				.' WHERE entity = '.$entity.' AND fk_id = '.$legacyId;
+			$sql[] = 'INSERT IGNORE INTO '.MAIN_DB_PREFIX.'usergroup_rights (entity, fk_usergroup, fk_id)'
+				.' SELECT entity, fk_usergroup, '.$newId.' FROM '.MAIN_DB_PREFIX.'usergroup_rights'
+				.' WHERE entity = '.$entity.' AND fk_id = '.$legacyId;
+		}
+
+		$legacyIdList = implode(', ', $legacyIds);
+		$sql[] = 'DELETE FROM '.MAIN_DB_PREFIX.'user_rights WHERE entity = '.$entity.' AND fk_id IN ('.$legacyIdList.')';
+		$sql[] = 'DELETE FROM '.MAIN_DB_PREFIX.'usergroup_rights WHERE entity = '.$entity.' AND fk_id IN ('.$legacyIdList.')';
+		$sql[] = 'DELETE FROM '.MAIN_DB_PREFIX.'rights_def WHERE entity = '.$entity.' AND id IN ('.$legacyIdList.')';
+
+		return $sql;
 	}
 
 	/**

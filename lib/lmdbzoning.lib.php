@@ -15,6 +15,7 @@ function lmdbzoningAdminPrepareHead()
 	return array(
 		array(dol_buildpath('/lmdbzoning/admin/setup.php', 1), $langs->trans('Settings'), 'settings'),
 		array(dol_buildpath('/lmdbzoning/admin/compatibility.php', 1), $langs->trans('Compatibility'), 'compatibility'),
+		array(dol_buildpath('/lmdbzoning/admin/about.php', 1), $langs->trans('About'), 'about'),
 	);
 }
 

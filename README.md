@@ -9,7 +9,7 @@ Module externe Dolibarr pour calculer et stocker une zone géographique à parti
 - MySQL/MariaDB
 - Multicompany
 - Installation prévue dans `htdocs/custom/lmdbzoning`
-- Identifiant de module : `450021`
+- Identifiant de module : `450022`
 
 ## Fonctionnalités
 
@@ -20,10 +20,10 @@ Module externe Dolibarr pour calculer et stocker une zone géographique à parti
 - Fournisseur par défaut : Géoplateforme/BAN `https://data.geopf.fr/geocodage/search`.
 - Résultats génériques par objet Dolibarr via `element_type` / `fk_element`.
 - Forçage manuel avec motif obligatoire.
-- Application optionnelle de catégories natives Dolibarr lorsque le type d'objet est supporté.
+- Application optionnelle des catégories natives Dolibarr, configurable indépendamment pour chaque type d'objet pris en charge.
 - API PHP `LmdbZoningService` et API REST `LmdbZoningApi`.
 - Cron de recalcul des résultats en attente.
-- Page de compatibilité centralisée.
+- Pages de réglages internes **Compatibilité** et **À propos**.
 
 ## Installation
 
@@ -69,7 +69,8 @@ Chaque table métier porte `entity`.
 ## Intégrations
 
 - `powerplantpv` : lecture optionnelle de l'adresse d'installation, affichage d'un bloc de résultat si un zonage existe, et recalcul via les triggers `POWERPLANTPV_POWERPLANT_CREATE` / `POWERPLANTPV_POWERPLANT_MODIFY`.
-- Catégories centrales : si `LMDBZONING_AUTO_APPLY_CATEGORY` est activé, les catégories de zonage sont synchronisées dans la liaison native `categorie_powerplant` sans modifier les autres catégories manuelles.
+- Catégories natives : la section **Catégorisation automatique** des réglages propose un switch par type d'objet dont le module est actif. Les choix sont stockés par entité dans les constantes `LMDBZONING_AUTO_APPLY_CATEGORY_<TYPE>` et ne modifient pas les autres catégories manuelles.
+- Types configurables : tiers, contacts, propositions commerciales, commandes clients, factures clients, contrats, projets, interventions, feuilles de temps hebdomadaires et centrales photovoltaïques.
 - `pricelist` : doit lire `lmdbzoning_object_zone` ou `LmdbZoningService::getObjectZone()`, sans recalculer la distance.
 - `timesheetweek` : supporté comme `element_type`; aucune modification automatique des temps en V1.
 
@@ -81,3 +82,9 @@ Chaque table métier porte `entity`.
 - Facturation automatique des kilomètres.
 - Primes automatiques dans `timesheetweek`.
 - Modification du core Dolibarr.
+
+## Licence
+
+Le code du module est distribué sous licence [GNU GPL version 3 ou ultérieure](LICENSE).
+
+La documentation du module, notamment `README.md` et `ChangeLog.md`, est distribuée sous licence GNU Free Documentation License version 1.3 ou ultérieure, sans section invariante, sans texte de première de couverture et sans texte de quatrième de couverture.
